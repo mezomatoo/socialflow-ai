@@ -378,6 +378,49 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
         </section>
       </div>
 
+      {/* AI Günlük Asistan */}
+      <section className="card mt-5">
+        <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+          <div>
+            <h2 className="section-title flex items-center gap-2"><Icon name="sparkles" size={16} className="text-brand-600"/> AI Günlük Asistan</h2>
+            <p className="section-sub">Bugün ne yapmalıyım? • Öncelikli görevler ve akıllı uyarılar</p>
+          </div>
+          <Link href="/ai-asistan" className="btn-ghost btn-sm">Asistana git</Link>
+        </header>
+        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+          <div>
+            <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-faint">Bugün</h3>
+            <ul className="mt-2 space-y-2">
+              <li className="flex items-start gap-2.5 rounded-xl border border-line p-3">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600"><Icon name="calendar" size={14}/></span>
+                <span><strong className="text-[13px]">Bugün 4 paylaşım planlı.</strong><span className="block text-[12px] text-ink-muted">Instagram (2), LinkedIn (1), X (1) — takvimi kontrol edin.</span></span>
+              </li>
+              <li className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/5 p-3">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning"><Icon name="alert-triangle" size={14}/></span>
+                <span><strong className="text-[13px]">2 içerik onay bekliyor.</strong><span className="block text-[12px] text-ink-muted">Taslaklar → onay verin.</span></span>
+              </li>
+              <li className="flex items-start gap-2.5 rounded-xl border border-line p-3">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger"><Icon name="users" size={14}/></span>
+                <span><strong className="text-[13px]">Instagram hesabınız yeniden bağlantı gerektiriyor.</strong><span className="block text-[12px] text-ink-muted">Sosyal Hesaplar → Yeniden Bağla</span></span>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-faint">Akıllı Uyarılar</h3>
+            <ul className="mt-2 space-y-2">
+              <li className="rounded-xl border border-line bg-surface-subtle p-3 text-[12.5px]"><strong>Son 10 içeriğinizin 8’i ürün tanıtımı.</strong> Denge için eğitici ve topluluk içerikleri ekleyin.</li>
+              <li className="rounded-xl border border-line bg-surface-subtle p-3 text-[12.5px]"><strong>Bu kampanyada LinkedIn içeriği bulunmuyor.</strong> Profesyonel kitle için LinkedIn önerilir.</li>
+              <li className="rounded-xl border border-line bg-surface-subtle p-3 text-[12.5px]"><strong>Bu hafta Story planınız boş.</strong> Hikaye etkileşimi yüksek — AI ile 2 story önerisi oluşturun.</li>
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/ai-planlayici" className="btn-secondary btn-sm"><Icon name="calendar" size={13}/> Plan öner</Link>
+              <Link href="/otomasyonlar" className="btn-ghost btn-sm"><Icon name="magic" size={13}/> Otomasyon kur</Link>
+              <Link href="/ai-studio" className="btn-ghost btn-sm"><Icon name="shapes" size={13}/> Kreatif üret</Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {demoMode ? (
         <p className="mt-6 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-center text-[12px] font-medium text-[#92400e]">
           Demo Modu — gerçek sosyal medya paylaşımı yapılmadı. Tüm doğrulama, uyarlama, planlama ve yayın akışları çalışır durumdadır; yalnızca son adım simüle edilir.
