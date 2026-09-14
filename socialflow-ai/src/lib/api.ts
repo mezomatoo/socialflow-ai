@@ -1,0 +1,101 @@
+import { NextResponse } from 'next/server';
+import { ZodError } from './zod-lite';
+import { ForbiddenError, UnauthorizedError, verifyCsrf, getSession, clientIp } from './auth/session';
+import { rateLimit, rateLimitHeaders } from './security/rateLimit';
+
+/**
+ * Tüm API route'ları için ortak sarmalayıcı.
+ * - CSRF doğrulaması (mutasyon istekleri)
+ * - Hız sınırlama
+ * - Tutarlı Türkçe hata gövdeleri
+ * - Oturum çözümü
+ */
+
+export type Handler<Ctx = unknown> = (
+  request: Request,
+  ctx: { params: Ctx; session: NonNullable<Awaited<ReturnType<typeof getSession>>> }
+) => Promise<Response> | Response;
+
+export interface ErrorBody {
+  ok: false;
+  error: { code: string; message: string; details?: unknown };
+}
+
+export function ok<T>(data: T, init?: ResponseInit): NextResponse {
+  return NextResponse.json({ ok: true, data }, init);
+}
+
+export function fail(code: string, message: string, status = 400, details?: unknown): NextResponse {
+  const body: ErrorBody = { ok: false, error: { code, message, details } };
+  return NextResponse.json(body, { status });
+}
+
+export function unauthorized(message = 'Oturumunuz bulunamadı. Lütfen tekrar giriş yapın.') {
+  return fail('UNAUTHORIZED', message, 401);
+}
+
+export function forbidden(message = 'Bu işlem için yetkiniz bulunmuyor.') {
+  return fail('FORBIDDEN', message, 403);
+}
+
+export function badRequest(message: string, details?: unknown) {
+  return fail('BAD_REQUEST', message, 400, details);
+}
+
+export function notFound(message = 'Kayıt bulunamadı.') {
+  return fail('NOT_FOUND', message, 404);
+}
+
+export function serverError(message = 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.') {
+  return fail('INTERNAL_ERROR', message, 500);
+}
+
+interface RouteOptions {
+  /** Mutasyonlarda CSRF doğrulaması (varsayılan: açık) */
+  csrf?: boolean;
+  /** Hız sınırı: pencere başına istek */
+  limit?: number;
+  windowMs?: number;
+  /** Oturum zorunlu mu (varsayılan: true) */
+  auth?: boolean;
+}
+
+export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, options: RouteOptions = {}) {
+  const { csrf = true, limit = 180, windowMs = 60_000, auth = true } = options;
+
+  return async (request: Request, routeCtx: { params: Ctx }): Promise<Response> => {
+    const ip = clientIp(request);
+    const pathname = new URL(request.url).pathname;
+  const rl = rateLimit(`${ip}:${pathname}`, limit, windowMs);
+    if (!rl.ok) {
+      return fail(
+        'RATE_LIMITED',
+        'Çok fazla istek gönderdiniz. Lütfen birkaç saniye bekleyip tekrar deneyin.',
+        429
+      );
+    }
+
+    try {
+      if (csrf && !verifyCsrf(request)) {
+        return fail('CSRF_FAILED', 'Güvenlik doğrulaması başarısız oldu. Sayfayı yenileyip tekrar deneyin.', 403);
+      }
+
+      let session: Awaited<ReturnType<typeof getSession>> = null;
+      if (auth) {
+        session = await getSession();
+        if (!session) return unauthorized();
+      }
+
+      const response = await handler(request, { params: routeCtx.params, session: session! });
+      Object.entries(rateLimitHeaders(rl)).forEach(([k, v]) => response.headers.set(k, v));
+      return response;
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return unauthorized(err.message);
+      if (err instanceof ForbiddenError) return forbidden(err.message);
+      if (err instanceof ZodError) return badRequest(err.issues[0]?.message ?? 'Geçersiz istek.', err.issues);
+      console.error('[api]', new URL(request.url).pathname, err);
+      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      return serverError(process.env.APP_ENV === 'production' ? undefined : message);
+    }
+  };
+}

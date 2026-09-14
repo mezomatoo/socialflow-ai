@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+build
+dist
+coverage
+.env
+.env.local
+prisma/dev.db
+prisma/dev.db-journal
+storage/*
+!storage/demo
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+
+# Test veritabanı
+prisma/test.db
+prisma/test.db-journal

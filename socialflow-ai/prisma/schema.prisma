@@ -1,0 +1,1181 @@
+// =============================================================================
+//  SocialFlow AI — Prisma Schema
+// =============================================================================
+//  Demo/geliştirme için SQLite, üretim için PostgreSQL hedeflenir.
+//  SQLite enum desteklemediğinden tüm enum alanlar String olarak tutulur ve
+//  tip güvenliği `src/lib/types/enums.ts` içindeki TS union'ları ile sağlanır.
+//  PostgreSQL'e geçiş: datasource provider="postgresql" + aşağıdaki `PG:`
+//  yorumlarında belirtilen alanları `enum` / `Bytes` / `Json` tiplerine çevirin.
+//
+//  Temel veri modeli:
+//    Content (1) ──< PlatformContent (N)
+//  Yani her sosyal ağ için yeni bir kampanya kopyalanmaz; tek bir "master"
+//  içerikten platform bazlı çocuk kayıtlar türetilir.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // PG: "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Kimlik, çoklu kiracılık (multi-tenancy) ve yetkilendirme
+// -----------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  email        String    @unique
+  passwordHash String // argon2id / bcrypt — asla düz metin
+  name         String
+  avatarUrl    String?
+  role         String    @default("OWNER") // Role
+  locale       String    @default("tr-TR")
+  timezone     String    @default("Europe/Istanbul")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdContent Content[]      @relation("ContentCreator")
+  approvals      Content[]      @relation("ContentApprover")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  sessions       Session[]
+
+  @@index([workspaceId])
+}
+
+// Sunucu taraflı oturumlar. Tarayıcıda yalnızca HttpOnly+SameSite=Lax çerez
+// içinde opak bir oturum kimliği tutulur; token'lar asla localStorage'a yazılmaz.
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // oturum çerezi değerinin SHA-256'sı
+  csrfToken String // form/istek CSRF doğrulaması
+  ip        String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("PRO") // FREE | PRO | AGENCY | ENTERPRISE
+  demoMode  Boolean  @default(true) // true => gerçek sosyal paylaşım yapılmaz
+  timezone  String   @default("Europe/Istanbul")
+  locale    String   @default("tr-TR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  brands           Brand[]
+  socialAccounts   SocialAccount[]
+  mediaAssets      MediaAsset[]
+  contents         Content[]
+  platformRules    PlatformRule[]
+  hashtagSets      HashtagSet[]
+  hashtagEntries   HashtagEntry[]
+  savedMentions    SavedMention[]
+  campaigns        Campaign[]
+  notifications    Notification[]
+  analytics        AnalyticsSnapshot[]
+  auditLogs        AuditLog[]
+  jobs             Job[]
+  appSettings      AppSettings?
+  integrationState ProviderIntegration[]
+
+  @@index([slug])
+}
+
+// Uygulama markası (ad, logo, renkler) — Admin Ayarları'ndan düzenlenebilir.
+model AppSettings {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  appName         String   @default("SocialFlow AI")
+  logoUrl         String?
+  logoMark        String   @default("SF")
+  primaryColor    String   @default("#6D28D9")
+  secondaryColor  String   @default("#0EA5E9")
+  accentColor     String   @default("#F59E0B")
+  radius          String   @default("14px")
+  fontFamily      String   @default("Inter")
+  defaultLanguage String   @default("tr")
+  defaultTimezone String   @default("Europe/Istanbul")
+  demoBanner      Boolean  @default(true)
+  aiProvider      String   @default("deterministic")
+  aiModel         String?
+  aiTemperature   Float    @default(0.7)
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Marka profilleri ve marka sesi
+// -----------------------------------------------------------------------------
+
+model Brand {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  name             String
+  slug             String
+  logoUrl          String?
+  primaryColor     String   @default("#6D28D9")
+  secondaryColor   String   @default("#0EA5E9")
+  fontStyle        String   @default("Inter")
+  website          String?
+  defaultCta       String?
+  description      String?
+  targetAudience   String?
+  defaultStyle     String   @default("PROFESSIONAL") // ContentStyle
+  defaultHashtags  String   @default("") // boşlukla ayrılmış
+  requiredHashtags String   @default("")
+  bannedHashtags   String   @default("")
+  defaultMentions  String   @default("")
+  isDefault        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  voice          BrandVoice?
+  brandKit       BrandKit?       // PHASE 4 — marka kimliğinin merkezi doğruluk kaynağı (1:1)
+  socialAccounts SocialAccount[]
+  contents       Content[]
+  mediaAssets    MediaAsset[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+// Marka sesi: AI uyarlamasının "ton" girdisi.
+model BrandVoice {
+  id            String   @id @default(cuid())
+  brandId       String   @unique
+  tone          String   @default("profesyonel ve samimi")
+  personality   String?
+  audience      String?
+  styleGuide    String? // PG: Json
+  allowedTerms  String   @default("") // virgülle ayrılmış
+  bannedTerms   String   @default("")
+  mustKeepTerms String   @default("") // fiyat, ürün adı, tarih vb. — AI asla çıkarmaz
+  formality     String   @default("NEUTRAL") // FORMAL | NEUTRAL | CASUAL
+  emojiLevel    String   @default("MEDIUM") // NONE | LOW | MEDIUM | HIGH
+  language      String   @default("tr")
+  updatedAt     DateTime @updatedAt
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Sosyal hesaplar, OAuth token'ları ve entegrasyon durumu
+// -----------------------------------------------------------------------------
+
+model SocialAccount {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  brandId          String?
+  platform         String // PlatformCode
+  externalId       String? // sağlayıcının hesap/page/channel id'si
+  handle           String // @kullaniciadi
+  displayName      String
+  avatarUrl        String?
+  accountType      String    @default("PROFILE") // PROFILE | PAGE | BUSINESS | CHANNEL | GROUP
+  scopes           String    @default("") // PG: Json (dizi)
+  connectionStatus String    @default("ACTIVE") // ConnectionStatus
+  lastValidatedAt  DateTime?
+  lastError        String? // kullanıcıya gösterilecek Türkçe, anlaşılır mesaj
+  demoAccount      Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand            Brand?               @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  token            SocialProviderToken?
+  platformContents PlatformContent[]
+
+  @@unique([workspaceId, platform, handle])
+  @@index([workspaceId, platform])
+}
+
+// Token'lar asla tarayıcıya gönderilmez; AES-256-GCM ile şifrelenerek saklanır.
+model SocialProviderToken {
+  id               String                @id @default(cuid())
+  socialAccountId  String                @unique
+  // AES-256-GCM ile şifrelenmiş, base64 metin. SQLite/PostgreSQL
+  // taşınabilirliği için String; üretimde Bytes/bytea'ya çevrilebilir.
+  accessTokenEnc   String
+  refreshTokenEnc  String?
+  tokenType        String                @default("Bearer")
+  scope            String                @default("")
+  expiresAt        DateTime?
+  refreshExpiresAt DateTime?
+  lastRefreshedAt  DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  account SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+}
+
+// Çalışma alanı bazlı API entegrasyon durumu (Bağlı / Yapılandırılmadı / ...)
+model ProviderIntegration {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  platform       String // PlatformCode
+  status         String    @default("NOT_CONFIGURED") // IntegrationStatus
+  credentialsSet Boolean   @default(false)
+  apiVersion     String?
+  lastCheckedAt  DateTime?
+  message        String? // Türkçe açıklama
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform])
+}
+
+// -----------------------------------------------------------------------------
+// Medya kütüphanesi
+// -----------------------------------------------------------------------------
+
+model MediaFolder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  parentId    String?
+  createdAt   DateTime @default(now())
+
+  parent   MediaFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children MediaFolder[] @relation("FolderTree")
+  assets   MediaAsset[]
+
+  @@index([workspaceId])
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  brandId      String?
+  folderId     String?
+  kind         String // IMAGE | VIDEO | LOGO | CAROUSEL_ITEM
+  filename     String
+  originalName String
+  storageKey   String // orijinal master dosya — asla değiştirilmez
+  publicUrl    String?
+  mimeType     String
+  format       String // jpg | png | webp | mp4 ...
+  bytes        Int
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  aspectRatio  Float?
+  contentHash  String? // SHA-256 → aynı dosya iki kez yüklenmez
+  focalPoint   String? // PG: Json { x, y, method }
+  analysis     String? // PG: Json — MediaAnalysisService çıktısı
+  // Türetilmiş render varyantları. Orijinal dokunulmadan korunur.
+  // PG: Json → [{ platform, contentType, ratio, storageKey, width, height, bytes }]
+  derivatives  String   @default("[]")
+  tags         String   @default("")
+  campaign     String?
+  alt          String?
+  status       String   @default("READY") // PENDING | PROCESSING | READY | FAILED
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand            Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  folder           MediaFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  contentLinks     ContentMedia[]
+  platformContents PlatformContent[]
+
+  @@unique([workspaceId, contentHash])
+  @@index([workspaceId, kind])
+  @@index([workspaceId, createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// İçerik: master kayıt + platform bazlı çocuk kayıtlar
+// -----------------------------------------------------------------------------
+
+model Content {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  brandId          String
+  campaignId       String?
+  title            String?
+  masterCaption    String
+  storyText        String? // Hikaye metni, ana açıklamadan bağımsız olabilir
+  linkUrl          String?
+  utm              String? // PG: Json { source, medium, campaign, content, term }
+  defaultStyle     String    @default("PROFESSIONAL") // ContentStyle
+  defaultCta       String?
+  hashtagPlacement String    @default("INLINE") // INLINE | FIRST_COMMENT | SEPARATE
+  timezone         String    @default("Europe/Istanbul")
+  scheduleMode     String    @default("NOW") // NOW | SCHEDULE | DRAFT
+  scheduledFor     DateTime?
+  status           String    @default("DRAFT") // ContentStatus
+  adaptState       String    @default("NONE") // NONE | ADAPTING | ADAPTED | PARTIAL | ERROR
+  version          Int       @default(1)
+  createdById      String?
+  approvedById     String?
+  approvedAt       DateTime?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand            Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign         Campaign?           @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdBy        User?               @relation("ContentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy       User?               @relation("ContentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  media            ContentMedia[]
+  versions         ContentVersion[]
+  platformContents PlatformContent[]
+  schedules        Schedule[]
+  notifications    Notification[]
+  analytics        AnalyticsSnapshot[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledFor])
+  @@index([brandId])
+}
+
+model ContentMedia {
+  id        String @id @default(cuid())
+  contentId String
+  mediaId   String
+  position  Int    @default(0)
+
+  content Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  media   MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, mediaId])
+  @@index([contentId])
+}
+
+// Sürüm geçmişi: orijinal → AI uyarlaması → kullanıcı düzenlemesi
+model ContentVersion {
+  id          String   @id @default(cuid())
+  contentId   String
+  version     Int
+  kind        String   @default("MANUAL") // ORIGINAL | AI_ADAPTED | MANUAL | RESTORED
+  note        String?
+  // PG: Json — { masterCaption, storyText, style, platformContents: {...} }
+  payload     String   @default("{}")
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, version])
+  @@index([contentId])
+}
+
+// *** KRİTİK *** Her hedef (platform + içerik türü) için bağımsız çocuk kayıt.
+model PlatformContent {
+  id              String  @id @default(cuid())
+  contentId       String
+  socialAccountId String?
+  platform        String // PlatformCode
+  contentType     String // ContentType: FEED | STORY | REEL | SHORTS | POST | PIN | VIDEO
+  key             String // "instagram:FEED" — içerik başına benzersiz
+  enabled         Boolean @default(true)
+
+  caption          String  @default("")
+  captionSource    String  @default("PENDING") // PENDING | AI | MANUAL | ORIGINAL
+  hashtags         String  @default("")
+  hashtagPlacement String  @default("INLINE")
+  cta              String?
+  linkUrl          String?
+  firstComment     String?
+
+  // Medya render özellikleri (orijinal medya değiştirilmez, varyant üretilir)
+  mediaAssetId String?
+  aspectRatio  String? // "1:1" | "4:5" | "9:16" | "16:9"
+  targetWidth  Int?
+  targetHeight Int?
+  focalPoint   String? // PG: Json { x, y }
+  cropMode     String  @default("SMART") // SMART | MANUAL | FIT | AI_EXTEND
+  manualOffset String? // PG: Json { x, y } — elle kaydırma
+  edits        String  @default("{}") // PG: Json — rotate/zoom/brightness/... + katmanlar
+  renderedKey  String? // üretilen varyantın storage anahtarı
+  renderedUrl  String?
+  safeAreaOk   Boolean @default(true)
+
+  charLimit Int @default(2200)
+  charUsed  Int @default(0)
+
+  status         String    @default("DRAFT") // PublishStatus
+  scheduledFor   DateTime?
+  publishedAt    DateTime?
+  lastError      String? // Türkçe, anlaşılır hata
+  lastErrorCode  String? // sağlayıcının ham hata kodu (log için)
+  retryCount     Int       @default(0)
+  externalPostId String?
+  permalink      String?
+  updatedAt      DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+
+  content       Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount?      @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  mediaAsset    MediaAsset?         @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  schedule      Schedule?
+  publications  Publication[]
+  analytics     AnalyticsSnapshot[]
+
+  @@unique([contentId, key])
+  @@index([contentId])
+  @@index([status, scheduledFor])
+}
+
+// -----------------------------------------------------------------------------
+// Planlama, yayınlama ve idempotent denemeler
+// -----------------------------------------------------------------------------
+
+model Schedule {
+  id                String   @id @default(cuid())
+  contentId         String
+  platformContentId String   @unique
+  scheduledFor      DateTime
+  timezone          String   @default("Europe/Istanbul")
+  status            String   @default("PENDING") // PENDING | QUEUED | PROCESSING | DONE | FAILED | CANCELLED
+  jobId             String?
+  aiSuggested       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  content         Content         @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  platformContent PlatformContent @relation(fields: [platformContentId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+}
+
+model Publication {
+  id                String    @id @default(cuid())
+  platformContentId String
+  contentId         String
+  // İdempotency anahtarı: retry'larda çift gönderim oluşmaz.
+  idempotencyKey    String    @unique
+  status            String    @default("PENDING") // PublicationStatus
+  providerPostId    String?
+  permalink         String?
+  publishedAt       DateTime?
+  demoMode          Boolean   @default(true)
+  attempts          Int       @default(0)
+  maxAttempts       Int       @default(3)
+  lastError         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  platformContent PlatformContent      @relation(fields: [platformContentId], references: [id], onDelete: Cascade)
+  attemptsLog     PublicationAttempt[]
+
+  @@index([contentId])
+  @@index([status])
+}
+
+model PublicationAttempt {
+  id              String   @id @default(cuid())
+  publicationId   String
+  attempt         Int
+  ok              Boolean
+  httpStatus      Int?
+  providerCode    String? // ör. "OAuthException 190"
+  providerMessage String?
+  friendlyMessage String? // Türkçe, kullanıcıya gösterilen
+  actionLabel     String? // ör. "Hesabı Yeniden Bağla"
+  actionRoute     String?
+  durationMs      Int?
+  createdAt       DateTime @default(now())
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId])
+}
+
+// -----------------------------------------------------------------------------
+// Platform kural motoru — sınırlar koda gömülü DEĞİL, veritabanında tutulur
+// -----------------------------------------------------------------------------
+
+model PlatformRule {
+  id                       String   @id @default(cuid())
+  workspaceId              String
+  platform                 String // PlatformCode
+  contentType              String // ContentType
+  label                    String // "Instagram Gönderisi"
+  maxCaptionLength         Int
+  recommendedCaptionLength Int
+  minCaptionLength         Int      @default(0)
+  supportedAspectRatios    String   @default("[]") // PG: Json ["1:1","4:5"]
+  recommendedAspectRatio   String
+  minWidth                 Int
+  minHeight                Int
+  maxWidth                 Int      @default(4096)
+  maxHeight                Int      @default(4096)
+  // Boyutlar KB olarak saklanır (256 GB gibi büyük değerler INT32 sınırını
+  // aşmasın diye). Kural motoru bunları bayta çevirir.
+  maxFileSizeKb            Int
+  maxVideoFileSizeKb       Int?
+  supportedMimeTypes       String   @default("[]") // PG: Json
+  supportedImageFormats    String   @default("[]")
+  supportedVideoFormats    String   @default("[]")
+  maxVideoDuration         Int? // saniye
+  minVideoDuration         Int?
+  maxMediaCount            Int      @default(1)
+  maxHashtags              Int      @default(0)
+  recommendedHashtags      Int      @default(0)
+  hashtagRecommendation    String   @default("[]") // PG: Json — örnek/önerilen etiketler
+  supportsLinks            Boolean  @default(false)
+  clickableLinks           Boolean  @default(false)
+  supportsStories          Boolean  @default(false)
+  supportsCarousel         Boolean  @default(false)
+  supportsReels            Boolean  @default(false)
+  supportsScheduling       Boolean  @default(true)
+  supportsFirstComment     Boolean  @default(false)
+  supportsLocation         Boolean  @default(false)
+  supportsMentions         Boolean  @default(true)
+  supportsAltText          Boolean  @default(false)
+  supportsThreads          Boolean  @default(false)
+  safeArea                 String? // PG: Json { top, bottom, left, right } (oransal)
+  restrictions             String   @default("[]") // PG: Json — Türkçe kısıt açıklamaları
+  apiVersion               String   @default("v1")
+  capabilities             String   @default("[]") // PG: Json
+  source                   String   @default("BUILTIN") // BUILTIN | SYNCED | MANUAL
+  active                   Boolean  @default(true)
+  lastUpdatedAt            DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform, contentType])
+  @@index([workspaceId, platform])
+}
+
+// -----------------------------------------------------------------------------
+// Hashtag motoru, mention'lar, kampanyalar
+// -----------------------------------------------------------------------------
+
+model HashtagSet {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  name        String
+  group       String   @default("GENERAL") // HashtagGroup
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  entries   HashtagEntry[]
+
+  @@index([workspaceId])
+}
+
+model HashtagEntry {
+  id          String   @id @default(cuid())
+  setId       String?
+  workspaceId String
+  tag         String // # işareti olmadan
+  group       String   @default("GENERAL")
+  language    String   @default("tr")
+  blocked     Boolean  @default(false) // yasaklı/güvensiz etiket
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  set       HashtagSet? @relation(fields: [setId], references: [id], onDelete: Cascade)
+  Workspace Workspace   @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, tag])
+  @@index([workspaceId, group])
+}
+
+model SavedMention {
+  id          String   @id @default(cuid())
+  workspaceId String
+  handle      String // @brand
+  platform    String? // null => tüm platformlar
+  label       String?
+  required    Boolean  @default(false) // AI kısaltırken asla çıkarmaz
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, handle, platform])
+}
+
+model Campaign {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  code        String
+  startDate   DateTime?
+  endDate     DateTime?
+  budget      Float? // ₺ TRY
+  currency    String    @default("TRY")
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contents  Content[]
+  analytics AnalyticsSnapshot[]
+
+  @@unique([workspaceId, code])
+}
+
+// -----------------------------------------------------------------------------
+// Bildirimler, analizler, denetim kaydı, kuyruk
+// -----------------------------------------------------------------------------
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String?
+  contentId   String?
+  type        String    @default("INFO") // NotificationType
+  title       String
+  message     String
+  severity    String    @default("INFO") // INFO | SUCCESS | WARNING | ERROR
+  readAt      DateTime?
+  actionLabel String?
+  actionRoute String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   Content?  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, readAt])
+  @@index([userId, createdAt])
+}
+
+model AnalyticsSnapshot {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  platformContentId String?
+  contentId         String?
+  campaignId        String?
+  brandId           String?
+  platform          String
+  accountHandle     String?
+  date              DateTime // gün bazlı
+  impressions       Int      @default(0)
+  reach             Int      @default(0)
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  shares            Int      @default(0)
+  saves             Int      @default(0)
+  clicks            Int      @default(0)
+  videoViews        Int      @default(0)
+  engagementRate    Float    @default(0)
+  followerDelta     Int      @default(0)
+  source            String   @default("DEMO") // API | DEMO
+  syncedAt          DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platformContent PlatformContent? @relation(fields: [platformContentId], references: [id], onDelete: Cascade)
+  content         Content?         @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  campaign        Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, date])
+  @@index([platformContentId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      String // ör. "content.publish", "account.connect"
+  entityType  String?
+  entityId    String?
+  ip          String?
+  userAgent   String?
+  metadata    String? // PG: Json
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// Kalıcı (durable) arka plan iş kuyruğu — veritabanı destekli.
+// Üretimde BullMQ/Redis veya SQS'e taşınabilir; arayüz aynı kalır.
+model Job {
+  id             String    @id @default(cuid())
+  workspaceId    String?
+  type           String // PublishContentJob | MediaProcessingJob | AnalyticsSyncJob | TokenRefreshJob
+  payload        String    @default("{}") // PG: Json
+  status         String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED
+  runAt          DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  lockedBy       String?
+  lockedAt       DateTime?
+  lastError      String?
+  result         String? // PG: Json
+  // Aynı işin iki kez kuyruğa girmesini engeller (idempotency).
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([type, status])
+}
+
+// OAuth "state" doğrulaması (CSRF koruması). Kısa ömürlü, tek kullanımlık.
+model OAuthState {
+  id           String    @id @default(cuid())
+  state        String    @unique
+  platform     String
+  userId       String?
+  workspaceId  String?
+  codeVerifier String? // PKCE
+  redirect     String?
+  consumedAt   DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+// =============================================================================
+//  PHASE 4 — BRAND KIT (additive: mevcut Brand/BrandVoice/MediaAsset KORUNUR)
+// =============================================================================
+//  BrandKit, Brand'in 1:1 genişlemesidir ve marka kimliğinin MERKEZİ doğruluk
+//  kaynağıdır (source of truth). Tüm AI/kreatif modülleri buradan beslenir.
+//  - Çoklu-marka izolasyonu (§134): her kayıt workspaceId + brandId taşır.
+//  - Onay deseni (§44): DRAFT | PENDING_APPROVAL | APPROVED | ARCHIVED.
+//  - Sürümleme (§45/§46): BrandKitVersion tüm kitin JSON anlık görüntüsünü tutar.
+//  - SQLite uyumu: enum'lar String, diziler/nesneler JSON String olarak saklanır.
+//  - Medya tekrar kullanımı: logo/varlık/referans kayıtları storageKey + opsiyonel
+//    mediaAssetId ile MEVCUT medya sistemine bağlanır (yeni medya sistemi YOK).
+
+model BrandKit {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String @unique
+
+  // --- Durum / sürüm / kilit (§40-§42, §45) ---
+  status            String  @default("ACTIVE") // DRAFT | ACTIVE | ARCHIVED
+  currentVersion    Int     @default(1)
+  completenessScore Int     @default(0) // 0-100 otomatik hesaplanır (§40)
+  lockMode          String  @default("OFF") // OFF | STANDARD | STRICT (§41)
+  strictMode        Boolean @default(false) // (§42) lockMode=STRICT ile hizalı
+  consistencyGate   String  @default("WARNING") // OFF | WARNING | REQUIRE_APPROVAL | BLOCK (§55)
+  learnFromApproved Boolean @default(false) // (§51) varsayılan KAPALI
+
+  // --- Temel bilgiler (§5) — Brand.name/website/description'ı GENİŞLETİR ---
+  shortName          String?
+  legalName          String?
+  mainSlogan         String?
+  subSlogan          String?
+  longDescription    String?
+  shortDescription   String?
+  industry           String?
+  subIndustry        String?
+  foundedYear        Int?
+  country            String?
+  mainMarket         String?
+  targetMarkets      String  @default("[]") // JSON dizi
+  mainLanguage       String  @default("tr")
+  supportedLanguages String  @default("[\"tr\"]") // JSON dizi
+
+  // --- İletişim (§6) — AI asla uydurmaz, yalnızca buradan okur ---
+  phone        String?
+  email        String?
+  whatsapp     String?
+  address      String?
+  supportLine  String?
+  workingHours String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand         Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  versions      BrandKitVersion[]
+  logos         BrandLogo[]
+  colors        BrandColor[]
+  typography    BrandTypography[]
+  messages      BrandMessage[]
+  ctas          BrandCTA[]
+  hashtags      BrandHashtag[]
+  mentions      BrandMention[]
+  visualRules   BrandVisualRule[]
+  platformRules BrandPlatformRule[]
+  legalRules    BrandLegalRule[]
+  assets        BrandAsset[]
+  references    BrandReference[]
+  memories      BrandMemory[]
+
+  @@index([workspaceId])
+}
+
+// Sürüm geçmişi (§45/§46): her onayda kitin tam JSON anlık görüntüsü.
+model BrandKitVersion {
+  id         String @id @default(cuid())
+  workspaceId String
+  brandId    String
+  brandKitId String
+  version    Int
+  label      String? // ör. "v1.2"
+  note       String?
+  snapshot   String  @default("{}") // kitin tamamının JSON anlık görüntüsü
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@unique([brandKitId, version])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Logo (§7-§10): kullanım tipi başına ayrı kayıt; kötüye-kullanım kuralları JSON.
+model BrandLogo {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  usageType   String  @default("PRIMARY") // PRIMARY|HORIZONTAL|VERTICAL|ICON|LIGHT_BG|DARK_BG|MONOCHROME|WATERMARK|FAVICON|APP_ICON
+  name        String?
+  storageKey  String? // mevcut storage() sürücüsünde
+  fileUrl     String?
+  mediaAssetId String? // opsiyonel çapraz referans (yeni medya sistemi değil)
+  format      String?
+  width       Int?
+  height      Int?
+  bytesKb     Int?
+  transparentBg Boolean @default(false)
+  isPrimary   Boolean @default(false)
+  // Kullanım kuralları (§8)
+  minWidth    Int?
+  minHeight   Int?
+  minSafeSpace String? // ör. "1x"
+  preferredPosition String?
+  allowedBackgrounds String @default("[]") // JSON
+  disallowedBackgrounds String @default("[]") // JSON
+  maxRotation Int     @default(0)
+  safeArea    String  @default("{}") // JSON {top,right,bottom,left}
+  misuseRules String  @default("[]") // JSON dizi (§10)
+  approvalStatus String @default("DRAFT") // DRAFT|PENDING_APPROVAL|APPROVED|ARCHIVED
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Renk (§11-§15): tam palet + pantone/cmyk; yasaklı renkler prohibited ile.
+model BrandColor {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  name        String
+  hex         String
+  rgb         String? // "255,255,255"
+  cmyk        String? // "0,0,0,0"
+  pantone     String?
+  category    String  @default("PRIMARY") // PRIMARY|SECONDARY|ACCENT|BACKGROUND|TEXT|NEUTRAL|SUPPORT|CAMPAIGN
+  usage       String? // kullanım açıklaması
+  priority    Int     @default(0)
+  prohibited  Boolean @default(false) // (§14) kullanılmaması gereken renkler
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Tipografi (§16-§18): rol başına font + lisans bilgisi.
+model BrandTypography {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  role        String  @default("BODY") // HEADING|SUBHEADING|BODY|CTA|ACCENT
+  fontFamily  String
+  fontWeight  String? // "400","700","Bold"
+  fontSizeRec String? // önerilen punto aralığı
+  lineHeight  String?
+  letterSpacing String?
+  textCase    String? // none|uppercase|lowercase|capitalize
+  usage       String?
+  licenseName String?
+  licenseProvider String?
+  licenseNote String?
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Slogan & mesajlar (§23-§24).
+model BrandMessage {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  type        String  @default("MAIN_SLOGAN") // MAIN_SLOGAN|SUB_SLOGAN|CAMPAIGN_SLOGAN|PRODUCT_SLOGAN|SHORT_MESSAGE|BRAND_PROMISE|USP|VALUE_PROPOSITION
+  text        String
+  language    String  @default("tr")
+  isPrimary   Boolean @default(false)
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// CTA (§25-§26): genel veya platform/kampanya bazlı; tercih edilen/yasaklı.
+model BrandCTA {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  text        String
+  platform    String? // null = genel; değilse PlatformCode
+  category    String  @default("PREFERRED") // PREFERRED|FORBIDDEN|CAMPAIGN
+  campaignId  String?
+  isPreferred Boolean @default(false)
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Hashtag (§27): marka kiti kapsamı (workspace HashtagSet'i TAMAMLAR).
+model BrandHashtag {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  tag         String // "#" olmadan
+  category    String  @default("DEFAULT") // DEFAULT|REQUIRED|CAMPAIGN|PRODUCT|LOCATION|COMMUNITY|BANNED
+  campaignId  String?
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Mention (§28): marka kiti kapsamı (workspace SavedMention'ı TAMAMLAR).
+model BrandMention {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  handle      String // "@..."
+  platform    String?
+  type        String  @default("OFFICIAL") // OFFICIAL|PARTNER|FOUNDER|CAMPAIGN_PARTNER|LOCATION|OTHER
+  label       String?
+  required    Boolean @default(false)
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Görsel stil kuralları (§29-§33): esnek kategori + JSON config.
+model BrandVisualRule {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  category    String  @default("PHOTOGRAPHY") // PHOTOGRAPHY|LIGHTING|BACKGROUND|COMPOSITION|DEPTH|COLOR_GRADING|PRODUCT_PLACEMENT|HUMAN_PRESENCE|MODEL|LIFESTYLE|TEXTURE|MOOD|ICON_STYLE|SHAPE_STYLE|PRODUCT_VISUAL
+  title       String
+  description String?
+  recommendedKeywords String @default("[]") // JSON dizi
+  avoidKeywords String @default("[]") // JSON dizi
+  config      String  @default("{}") // JSON (kategoriye özel ayarlar)
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Sosyal medya / platform kuralları (§34): platform başına ton/CTA/emoji override.
+model BrandPlatformRule {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  platform    String // PlatformCode
+  contentType String? // null = tüm tipler
+  guidance    String? // serbest metin yönerge
+  toneOverride String?
+  ctaOverride  String?
+  emojiLevel   String? // none|low|medium|high
+  config       String  @default("{}") // JSON
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@unique([brandKitId, platform, contentType])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Yasal + kampanya biçimlendirme kuralları (§35-§36).
+model BrandLegalRule {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  category    String  @default("LEGAL_INFO") // LEGAL_INFO|CAMPAIGN_RULE
+  key         String // PRICE_FORMAT|DISCOUNT_FORMAT|DATE_FORMAT|COUPON_FORMAT|MANDATORY_DISCLAIMER|REQUIRED_LEGAL_LINE|KVKK_URL|PRIVACY_URL|TERMS_URL|RETURN_POLICY_URL|REGISTERED_NAME|LEGAL_NOTICE|PROMOTION_RULE ...
+  value       String
+  required    Boolean @default(false)
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@unique([brandKitId, category, key])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Marka dosyaları / varlıklar (§37): storage() üzerinde, opsiyonel mediaAssetId.
+model BrandAsset {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  type        String  @default("OTHER") // LOGO|PRODUCT_IMAGE|FOUNDER_IMAGE|STORE_IMAGE|OFFICE_IMAGE|BACKGROUND|ICON|ILLUSTRATION|CAMPAIGN_IMAGE|VIDEO_INTRO|VIDEO_OUTRO|JINGLE|AUDIO|PDF_GUIDELINE|OTHER
+  name        String
+  storageKey  String?
+  fileUrl     String?
+  mediaAssetId String?
+  mimeType    String?
+  format      String?
+  bytesKb     Int?
+  width       Int?
+  height      Int?
+  tags        String  @default("[]") // JSON dizi
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Referanslar (§52): beğenilen / kaçınılacak tasarımlar.
+model BrandReference {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  kind        String  @default("LIKED") // LIKED | AVOID
+  title       String?
+  note        String?
+  storageKey  String?
+  fileUrl     String?
+  externalUrl String?
+  mediaAssetId String?
+  approvalStatus String @default("DRAFT")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
+
+// Marka hafızası (§50-§51): onaylı içerikten öğrenilen tercihler (varsayılan KAPALI).
+model BrandMemory {
+  id          String  @id @default(cuid())
+  workspaceId String
+  brandId     String
+  brandKitId  String
+  kind        String  @default("STYLE_INSIGHT") // STYLE_INSIGHT|APPROVED_PATTERN|PREFERENCE
+  source      String  @default("BRAND_KIT") // BRAND_KIT|APPROVED_CONTENT|APPROVED_CAMPAIGN|APPROVED_CREATIVE|TEMPLATE
+  sourceId    String? // kaynak kaydın id'si (izlenebilirlik)
+  summary     String
+  data        String  @default("{}") // JSON
+  embedding   String? // JSON dizi (semantik arama STEP 29'da doldurulur)
+  enabled     Boolean @default(true)
+  approvalStatus String @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit BrandKit @relation(fields: [brandKitId], references: [id], onDelete: Cascade)
+
+  @@index([brandKitId])
+  @@index([workspaceId])
+  @@index([brandId])
+}
