@@ -1,3 +1,4 @@
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import { apiRoute, ok } from '@/lib/api';
 import { generateHashtags } from '@/lib/ai/hashtagService';
 import { getRule } from '@/lib/rules/ruleEngine';
@@ -6,6 +7,7 @@ import prisma from '@/lib/prisma';
 /** AI Hashtag Önerileri */
 export const POST = apiRoute(
   async (request, { session }) => {
+    assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const platform = body.platform ? String(body.platform) : null;
     const contentType = body.contentType ? String(body.contentType) : null;

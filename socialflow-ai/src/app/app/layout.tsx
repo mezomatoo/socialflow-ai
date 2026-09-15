@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getAppBranding, brandingCssVariables } from '@/lib/settings/appSettings';
 import { AppShell } from '@/components/layout/AppShell';
+import { moduleState } from '@/lib/phase/phaseGates';
 import { ToastProvider } from '@/components/ui/Toaster';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div style={cssVars as React.CSSProperties}>
       <ToastProvider>
         <AppShell
+          modules={moduleState()}
           user={{
             id: session.user.id,
             name: session.user.name,

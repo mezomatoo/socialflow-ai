@@ -1,3 +1,4 @@
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import { apiRoute, ok, badRequest } from '@/lib/api';
 import { generate, TASK_LABELS, type AssistantTask } from '@/lib/ai/captionGenerationService';
 import prisma from '@/lib/prisma';
@@ -6,6 +7,7 @@ import { aiModeLabel } from '@/lib/ai/llmClient';
 /** AI İçerik Asistanı */
 export const POST = apiRoute(
   async (request, { session }) => {
+    assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const task = String(body.task ?? '') as AssistantTask;
     if (!TASK_LABELS[task]) return badRequest('Geçersiz AI görevi.');

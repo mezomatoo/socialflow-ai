@@ -39,8 +39,10 @@ const ROLE_LABELS: Record<string, string> = {
 export function AppShell({
   user,
   branding,
+  modules,
   children
 }: {
+  modules?: Record<string, { enabled: boolean; phase: number; label: string; notice: string }>;
   user: ShellUser;
   branding: ShellBranding;
   children: React.ReactNode;
@@ -92,7 +94,11 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Bildirimler Faz 3 modülüdür; kapalıyken API çağrılmaz ve zil gösterilmez.
+  const notificationsEnabled = modules?.notifications?.enabled ?? false;
+
   const openNotifications = async () => {
+    if (!notificationsEnabled) return;
     setNotifOpen((v) => !v);
     if (!notifOpen) {
       setLoadingNotif(true);
@@ -110,7 +116,7 @@ export function AppShell({
   const badgeFor = (key?: string) => {
     if (key === 'drafts') return counts.drafts;
     if (key === 'scheduled') return counts.scheduled;
-    if (key === 'notifications') return counts.unread;
+    if (key === 'notifications') return notificationsEnabled ? counts.unread : 0;
     return 0;
   };
 
@@ -246,6 +252,7 @@ export function AppShell({
               </Badge>
             ) : null}
 
+            {notificationsEnabled && (
             <div className="relative">
               <button type="button" className="btn-icon relative h-9 w-9" onClick={openNotifications} aria-label="Bildirimler">
                 <Icon name="bell" size={17} />
@@ -313,6 +320,7 @@ export function AppShell({
                 </>
               ) : null}
             </div>
+            )}
 
             <div className="relative">
               <button
