@@ -752,6 +752,9 @@ model Job {
 
 // OAuth "state" doğrulaması (CSRF koruması). Kısa ömürlü, tek kullanımlık.
 model OAuthState {
+  socialAccountId String?
+  redirectUri String?
+  accountUpdatedAt DateTime?
   id           String    @id @default(cuid())
   state        String    @unique
   platform     String

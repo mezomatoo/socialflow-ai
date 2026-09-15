@@ -43,6 +43,9 @@ export async function createOAuthState(params: {
   workspaceId?: string | null;
   redirect?: string;
   ttlSeconds?: number;
+  socialAccountId?: string;
+  redirectUri?: string;
+  accountUpdatedAt?: Date;
 }) {
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
@@ -51,6 +54,9 @@ export async function createOAuthState(params: {
   await prisma.oAuthState.create({
     data: {
       state,
+      socialAccountId: params.socialAccountId,
+      redirectUri: params.redirectUri,
+      accountUpdatedAt: params.accountUpdatedAt,
       platform: params.platform,
       userId: params.userId ?? null,
       workspaceId: params.workspaceId ?? null,
@@ -126,10 +132,10 @@ export async function exchangeAuthorizationCode(opts: TokenRequestOptions): Prom
     headers.Authorization = `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64')}`;
   }
 
-  const res = await fetch(config.tokenUrl, { method: 'POST', headers, body: body.toString() });
+  const res = await fetch(config.tokenUrl, { method: 'POST', headers, body: body.toString(), signal: AbortSignal.timeout(20_000), redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Token değişimi başarısız (HTTP ${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(`Token değişimi başarısız (HTTP ${res.status}).`);
   }
   return normalizeTokenResponse(JSON.parse(text));
 }
