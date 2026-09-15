@@ -119,7 +119,8 @@ model Workspace {
   adAccounts AdAccount[]
   products Product[]
   contacts Contact[]
-
+  webhookSubscriptions WebhookSubscription[]
+  webhookDeliveries    WebhookDelivery[]
 }
 
 // Uygulama markası (ad, logo, renkler) — Admin Ayarları'ndan düzenlenebilir.
@@ -419,6 +420,8 @@ model Content {
 
   @@index([workspaceId, status])
   @@index([workspaceId, scheduledFor])
+  @@index([workspaceId, updatedAt])
+  @@index([workspaceId, brandId])
   @@index([brandId])
 }
 
@@ -510,6 +513,10 @@ model PlatformContent {
   @@unique([contentId, key])
   @@index([contentId])
   @@index([status, scheduledFor])
+  @@index([scheduledFor])
+  @@index([enabled, scheduledFor])
+  @@index([socialAccountId])
+  @@index([mediaAssetId])
 }
 
 // -----------------------------------------------------------------------------
@@ -532,6 +539,8 @@ model Schedule {
   platformContent PlatformContent @relation(fields: [platformContentId], references: [id], onDelete: Cascade)
 
   @@index([status, scheduledFor])
+  @@index([scheduledFor, status])
+  @@index([contentId])
 }
 
 model Publication {
@@ -854,6 +863,8 @@ model Job {
 
   @@index([status, runAt])
   @@index([type, status])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
 }
 
 // OAuth "state" doğrulaması (CSRF koruması). Kısa ömürlü, tek kullanımlık.
@@ -1383,6 +1394,7 @@ model MediaVariant {
   @@unique([mediaAssetId, platform, contentType, aspectRatio])
   @@index([mediaAssetId])
   @@index([workspaceId, platform])
+  @@index([workspaceId, createdAt])
   @@index([processingStatus])
 }
 
@@ -2057,6 +2069,7 @@ model ContentPlanItem {
 
   @@index([planId, date])
   @@index([workspaceId])
+  @@index([workspaceId, date])
 }
 
 model ContentExperiment {
@@ -2203,6 +2216,73 @@ model AnalyticsAnomaly {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, date])
+}
+
+// -----------------------------------------------------------------------------
+// Çıkış ve Giriş Webhook Altyapısı (§78, §93)
+// -----------------------------------------------------------------------------
+
+model WebhookSubscription {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  url                 String
+  secret              String   // HMAC-SHA256 imzası için ortak gizli anahtar
+  events              String   @default("[]") // JSON dizi: ["*"] veya ["content.published"]
+  isActive            Boolean  @default(true)
+  description         String?
+  consecutiveFailures Int      @default(0)
+  disabledAt          DateTime?
+  disabledReason      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId, isActive])
+}
+
+model WebhookDelivery {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  subscriptionId String
+  event          String    // örn: content.published, inbox.event_received
+  payload        String    // JSON gövdesi
+  status         String    @default("PENDING") // PENDING | DELIVERED | RETRYING | DEAD_LETTER
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  responseStatus Int?
+  responseBody   String?
+  lastError      String?
+  nextRetryAt    DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([subscriptionId, createdAt])
+  @@index([status, nextRetryAt])
+}
+
+model InboundWebhookEvent {
+  id          String    @id @default(cuid())
+  workspaceId String?
+  provider    String    // META | X | LINKEDIN | GENERIC
+  eventId     String    // Sağlayıcıdan gelen benzersiz event/delivery kimliği (dedupe key)
+  eventType   String    // comment | mention | message | delivery_status | generic
+  payloadHash String    // SHA-256 gövde özeti
+  status      String    @default("PENDING") // PENDING | PROCESSED | DUPLICATE | FAILED
+  rawPayload  String?   // Hassas veri içermeyen filtrelenmiş JSON
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  error       String?
+
+  @@unique([provider, eventId])
+  @@index([provider, receivedAt])
+  @@index([workspaceId, status])
 }
 
 // Workspace settings extensions (if not already via AppSettings)
