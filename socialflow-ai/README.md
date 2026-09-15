@@ -184,3 +184,35 @@ Başarısız olaylar mevcut kuyruğun `FAILED` durumunda tutulur; yönetici yeni
 
 Denetim: [docs/PHASE5_AUDIT.md](docs/PHASE5_AUDIT.md)
 Aşama raporu ve sonraki adımlar: [docs/PHASE5_STAGE1_REPORT.md](docs/PHASE5_STAGE1_REPORT.md)
+
+### Faz 5 — Aşama 2: Instagram bağlantı dönüşü
+
+Instagram için `/api/auth/instagram/callback`, hedef hesapla eşleşme, verilmiş izin doğrulaması
+ve eski tokenı koruyan yeniden yetkilendirme eklendi. Yeni gerçek hesaplar artık OAuth tamamlanmadan
+“Bağlı” gösterilmez. **Bu aşama canlı Gelen Kutusu webhook/yanıt entegrasyonunu açmaz.**
+
+Mevcut inbox şemasını yükseltmek için uygulama/işçiyi durdurup:
+
+```bash
+python3 scripts/migrate-oauth.py prisma/dev.db
+npx prisma generate
+npm run build
+npm run start
+# Ayrı süreç:
+npm run worker
+```
+
+Normal Prisma CLI/motor erişimi olan dağıtımda migration geçmişi doğrulandıktan sonra
+`npx prisma migrate deploy` kullanılabilir. SQLite migration'larını PostgreSQL'e uygulamayın.
+Yerel `prisma/backups/` yedekleri ve `.env` GitHub'a gönderilmez; kalıcı/offsite DB yedeklemesi ayrıca gereklidir.
+
+Gerçek Meta akışı için `APP_URL` kök HTTPS origin olmalı ve
+`${APP_URL}/api/auth/instagram/callback` Meta uygulamasında izin verilen dönüş adresi olarak kayıtlı olmalıdır.
+`INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` sunucu ortamında tanımlanır; gizli değerleri sohbet veya Git'e koymayın.
+Global demo modu, workspace demo modu ve preview otomatik oturumu gerçek OAuth yerine kullanılamaz.
+Uygulama seçilmiş profesyonel hesabın adını/ID'sini Meta'dan doğrulamadan token kaydetmez.
+
+Ek testler: `npm run test:oauth`, `npm run test:instagram`, `npm run test:accounts`.
+Instagram testleri resmî API'ye bağlanmayan test adaptörleri kullanır.
+
+[Aşama 2 raporu ve GitHub kontrol noktaları](docs/PHASE5_STAGE2_REPORT.md)
