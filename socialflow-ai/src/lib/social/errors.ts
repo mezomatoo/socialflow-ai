@@ -128,7 +128,7 @@ const RULES: ErrorRule[] = [
   normalizedCode: 'CAPTION_INVALID',
   },
   {
-    match: (_c, m) => /over character|exceeds the maximum number of characters/i.test(m),
+    match: (_c, m) => /over (?:the maximum number of )?characters|over \d+ characters|exceeds the maximum number of characters/i.test(m),
     friendlyMessage: 'Metin X karakter sınırını aşıyor. AI ile yeniden kısaltmayı deneyin.',
     retryable: false,
   normalizedCode: 'CAPTION_INVALID',

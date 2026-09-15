@@ -12,7 +12,7 @@ describe('ProviderErrorNormalizer', () => {
     const r = toFriendlyError({ code: 'OAuthException', message: 'Error validating access token: Session has expired', httpStatus: 400 });
     assert.equal(r.normalizedCode, 'TOKEN_EXPIRED');
     assert.equal(r.retryable, false);
-    assert.ok(r.friendlyMessage.includes('yeniden bağlanmanız'), r.friendlyMessage);
+    assert.ok(/yeniden bağlanmanız/i.test(r.friendlyMessage), r.friendlyMessage);
     assert.equal(r.action?.route, '/app/hesaplar');
   });
 
