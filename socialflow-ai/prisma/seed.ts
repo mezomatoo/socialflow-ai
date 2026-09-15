@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { BUILTIN_RULES } from '../src/lib/platforms/builtinRules';
+import { isSeedAllowed } from './seed-guard';
 
 import prisma from '../src/lib/prisma';
 
@@ -32,6 +33,18 @@ function hashPassword(password: string) {
 const BUILTIN: any[] = BUILTIN_RULES as any[];
 
 async function main() {
+  // Üretim güvenlik kapısı (§15/§62): seed TÜM tabloları siler; üretimde
+  // yalnızca SEED_ALLOW_PRODUCTION=true ile açıkça onaylanmışsa çalışır.
+  const gate = isSeedAllowed({
+    isProduction: process.env.APP_ENV === 'production',
+    allowProductionSeed: process.env.SEED_ALLOW_PRODUCTION === 'true'
+  });
+  if (!gate.allowed) {
+    console.error(`✋ ${gate.reason}`);
+    process.exit(1);
+  }
+  if (gate.reason) console.warn(`⚠️ ${gate.reason}`);
+
   console.log('→ Veritabanı temizleniyor...');
   // Sıralama: bağımlılıklara göre
   await prisma.publicationAttempt.deleteMany();
