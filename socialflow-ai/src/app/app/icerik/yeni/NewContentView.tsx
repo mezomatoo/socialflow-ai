@@ -78,6 +78,7 @@ export function NewContentView({
   const [mediaIds, setMediaIds] = useState<string[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [consistency, setConsistency] = useState<any>(null);
+  const [checkingConsistency, setCheckingConsistency] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -370,33 +371,31 @@ export function NewContentView({
               </div>
             )}
 
-            {/* Brand consistency gate — Phase 4 §53-55 */}
+            {/* Marka uyumu kapısı — gerçek Marka Kiti denetimi (sunucu tarafı) */}
             <div className="mt-4 rounded-xl border border-line bg-surface-subtle p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[12.5px] font-bold text-ink flex items-center gap-1.5"><Icon name="shield" size={14} /> Marka Uyumu</span>
                 <button
                   className="btn-secondary btn-xs"
-                  onClick={() => {
-                    // Mock consistency check — gerçekte /api/brands/[id]/marka-kiti üzerinden kit çekilir
-                    const caption = masterCaption.trim().toLowerCase();
-                    const hasBanned = caption.includes('ucuz') || caption.includes('bayat');
-                    const hasCta = Boolean(brand?.defaultCta);
-                    const score = hasBanned ? 45 : hasCta ? 92 : 78;
-                    const gate = hasBanned ? 'WARN' : 'ALLOW';
-                    setConsistency({
-                      score,
-                      gate,
-                      message: hasBanned ? 'Marka uyumunda uyarılar var, gözden geçirmeniz önerilir.' : 'Marka uyumu iyi.',
-                      checks: [
-                        { label: 'Yasaklı kelime', ok: !hasBanned, detail: hasBanned ? '“ucuz/bayat” tespit edildi' : 'Yasaklı kelime yok', severity: hasBanned ? 'fail' : 'pass' },
-                        { label: 'Renk paleti', ok: true, detail: 'Onaylı renkler', severity: 'pass' },
-                        { label: 'CTA', ok: hasCta, detail: hasCta ? brand?.defaultCta! : 'CTA eksik', severity: hasCta ? 'pass' : 'warn' },
-                        { label: 'Hashtag', ok: true, detail: 'Hashtag uygun', severity: 'pass' },
-                      ],
-                    });
+                  disabled={!brandId || checkingConsistency}
+                  onClick={async () => {
+                    // Gerçek denetim: içerik, markanın onaylı kitine göre sunucuda kontrol edilir.
+                    setCheckingConsistency(true);
+                    try {
+                      const result = await api.post(`/api/v1/brands/${brandId}/marka-kiti/check`, {
+                        caption: masterCaption,
+                        platform: selections[0]?.platform ?? null
+                      });
+                      setConsistency(result);
+                    } catch {
+                      setConsistency(null);
+                      toast.error('Marka uyumu kontrol edilemedi.');
+                    } finally {
+                      setCheckingConsistency(false);
+                    }
                   }}
                 >
-                  <Icon name="magic" size={12} /> Kontrol Et
+                  {checkingConsistency ? <Spinner size={12} /> : <Icon name="magic" size={12} />} Kontrol Et
                 </button>
               </div>
               {consistency ? (
