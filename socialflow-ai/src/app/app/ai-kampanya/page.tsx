@@ -9,8 +9,10 @@ export const metadata = { title: 'AI Kampanya Oluşturucu' };
 export default async function Page() {
   const session = await getSession();
   if (!session) redirect('/giris');
-  const ws = session.user.workspaceId;
-  const brands: any[] = await prisma.brand.findMany({ where: { workspaceId: ws } }).catch(()=> []);
-  const safe = brands.length ? brands : [{ id: 'demo-brand-id', name: 'Kahve Dükkanı' }];
-  return <AiCampaignView brands={JSON.parse(JSON.stringify(safe))} demoMode={session.user.demoMode} />;
+  const brands = await prisma.brand.findMany({
+    where: { workspaceId: session.user.workspaceId },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true }
+  });
+  return <AiCampaignView brands={brands} demoMode={session.user.demoMode} />;
 }

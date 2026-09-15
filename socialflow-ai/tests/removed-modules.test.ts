@@ -8,6 +8,10 @@ it('katalog ve CRM ekranları, API rotaları ve servisleri kaldırıldı', () =>
   for (const path of ['src/app/app/katalog', 'src/app/app/musteriler', 'src/app/api/v1/catalog', 'src/app/api/v1/crm', 'src/lib/catalog', 'src/lib/crm', 'src/lib/business']) {
     assert.equal(existsSync(path), false, path);
   }
+  // Faz 4: sahte ürün/teklif (CampaignOffer) mock kataloğu da kaldırıldı (§10/§12/§87)
+  for (const path of ['src/lib/products', 'src/app/api/v1/products', 'src/app/api/v1/offers']) {
+    assert.equal(existsSync(path), false, path);
+  }
 });
 it('menü ve özellik ayarları kaldırılan modülleri göstermez; eski env bayrakları geri açamaz', () => {
   assert.ok(!NAV_GROUPS.some(g => ['catalog', 'crm'].includes(g.id)));

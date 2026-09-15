@@ -4,89 +4,162 @@ import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Badge, Spinner } from '@/components/ui';
 import { useToast } from '@/components/ui/Toaster';
-import { generateCampaign } from '@/lib/campaign/aiCampaign';
-import { listProducts, getOfferForProduct, formatOffer } from '@/lib/products/catalog';
+import { api } from '@/lib/client/api';
 
-export function AiCampaignView({ brands, demoMode }: { brands: any[]; demoMode: boolean }) {
+/**
+ * AI Kampanya Oluşturucu — mevcut Campaign sistemini genişletir (§86).
+ * Ürün/teklif/kupon modülü YOKTUR: fiyat gibi gerçek bilgiler yalnızca
+ * kullanıcının kendi girdiği metinden taşınır, AI uydurmaz (§78/§87).
+ */
+
+interface CampaignConcept {
+  theme: string;
+  name: string;
+  keyMessage: string;
+  pillars: string[];
+  platformStrategy: Record<string, string>;
+  calendar: { date: string; platform: string; topic: string }[];
+  creativeConcepts: string[];
+  captionConcepts: string[];
+  ctaStrategy: string[];
+  hashtagStrategy: string[];
+  engine: 'ai' | 'deterministic';
+}
+
+const PLATFORM_OPTIONS = ['INSTAGRAM', 'FACEBOOK', 'X', 'LINKEDIN', 'TIKTOK', 'YOUTUBE', 'PINTEREST', 'THREADS'];
+
+export function AiCampaignView({
+  brands,
+  demoMode
+}: {
+  brands: { id: string; name: string }[];
+  demoMode: boolean;
+}) {
   const toast = useToast();
   const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
-  const [goal, setGoal] = useState('Yeni Sezon Etiyopya Lansmanı');
-  const [productId, setProductId] = useState('prod-1');
-  const [start, setStart] = useState('2026-09-10');
-  const [end, setEnd] = useState('2026-09-20');
-  const [platforms, setPlatforms] = useState<string[]>(['INSTAGRAM','FACEBOOK','TIKTOK']);
+  const [name, setName] = useState('');
+  const [goal, setGoal] = useState('');
+  const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  const [end, setEnd] = useState(new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10));
+  const [userFacts, setUserFacts] = useState('');
+  const [platforms, setPlatforms] = useState<string[]>(['INSTAGRAM', 'LINKEDIN']);
   const [busy, setBusy] = useState(false);
-  const [concept, setConcept] = useState<any>(null);
-
-  const products = listProducts('demo-workspace-id', brandId);
-  const offer = productId ? getOfferForProduct(productId) : null;
+  const [concept, setConcept] = useState<CampaignConcept | null>(null);
+  const [created, setCreated] = useState<{ campaignId: string; code: string; name: string } | null>(null);
 
   async function handleGenerate() {
-    if (!goal.trim()) { toast.error('Kampanya hedefi gerekli'); return; }
-    if (offer && offer.status !== 'VERIFIED') { toast.error('Doğrulanmamış teklif', 'Yalnızca doğrulanmış fiyat/indirim kullanılabilir.'); return; }
+    if (!brandId || goal.trim().length < 2) {
+      toast.error('Eksik bilgi', 'Marka ve kampanya hedefi gereklidir.');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await generateCampaign({ brandId, goal, productId, offerId: offer?.id ?? null, startDate: start, endDate: end, platforms }, offer);
-      // Fact safety: never invent price — ensure offer values are exactly preserved
+      const res = await api.post<CampaignConcept>('/api/v1/ai/campaign/generate', {
+        brandId,
+        goal,
+        name: name || undefined,
+        startDate: start,
+        endDate: end,
+        platforms,
+        userFacts: userFacts || undefined
+      });
       setConcept(res);
-      toast.success('Kampanya konsepti hazır', 'Fiyat ve tarih bilgileri doğrulandı.');
-    } finally { setBusy(false); }
+      setCreated(null);
+      toast.success('Kampanya konsepti hazır', res.engine === 'ai' ? 'AI ile üretildi.' : 'Yerel motorla üretildi.');
+    } catch (e) {
+      toast.error('Oluşturulamadı', e instanceof Error ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreate() {
+    if (!concept) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{ campaignId: string; code: string; name: string; concept: CampaignConcept }>('/api/v1/ai/campaign/create', {
+        brandId,
+        goal,
+        name: name || concept.name,
+        startDate: start,
+        endDate: end,
+        platforms,
+        userFacts: userFacts || undefined
+      });
+      setCreated(res);
+      toast.success('Kampanya oluşturuldu', `${res.name} (${res.code}) kampanyalarınız arasında kaydedildi.`);
+    } catch (e) {
+      toast.error('Kampanya kaydedilemedi', e instanceof Error ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function togglePlatform(p: string) {
+    setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
   }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:py-8">
       <div className="mb-5">
         <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">AI Kampanya Oluşturucu</h1>
-        <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">Marka kitiniz, ürün kataloğunuz ve doğrulanmış tekliflerinizle tam uyumlu kampanya oluşturur. Fiyat, indirim, tarih ve kupon asla uydurulmaz.</p>
-        <div className="mt-2 flex gap-2">{demoMode ? <Badge tone="warning">Demo</Badge> : null}<Badge tone="brand">Doğrulanmış bilgiler korunur</Badge></div>
+        <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+          Tema, mesaj ve platform stratejisi önerir; sonucu mevcut kampanya sisteminize kaydeder. Fiyat, indirim veya
+          kampanya koşulu gibi bilgileri AI UYDURMAZ — yalnızca sizin girdiğiniz gerçek bilgiler önerilere taşınır.
+        </p>
+        <div className="mt-2 flex gap-2">
+          {demoMode ? <Badge tone="warning">Demo Modu</Badge> : null}
+          {concept ? <Badge tone={concept.engine === 'ai' ? 'brand' : 'neutral'}>{concept.engine === 'ai' ? 'AI ile üretildi' : 'Yerel motorla üretildi'}</Badge> : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[360px_1fr]">
-        <div className="card p-5 space-y-4 h-fit">
+        <div className="card h-fit space-y-4 p-5">
           <div>
             <label className="label">Marka</label>
-            <select className="select" value={brandId} onChange={(e)=>setBrandId(e.target.value)}>{brands.map((b:any)=><option key={b.id} value={b.id}>{b.name}</option>)}</select>
+            <select className="select" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Kampanya adı</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Örn: Yeni Sezon Lansmanı" />
           </div>
           <div>
             <label className="label">Kampanya hedefi</label>
-            <input className="input" value={goal} onChange={(e)=>setGoal(e.target.value)} placeholder="Örn: Lansman, satış, farkındalık"/>
-          </div>
-          <div>
-            <label className="label">Ürün</label>
-            <select className="select" value={productId} onChange={(e)=>setProductId(e.target.value)}>
-              <option value="">Ürünsüz kampanya</option>
-              {products.map((p)=> <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
-            </select>
-            {offer ? (
-              <div className="mt-2 rounded-lg border border-success/30 bg-success/5 p-2.5">
-                <p className="text-[12px] font-semibold text-success">Doğrulanmış Teklif</p>
-                <p className="text-[12.5px]">{formatOffer(offer)}</p>
-                <p className="text-[11px] text-ink-faint">Kaynak: CampaignOffer #{offer.id}</p>
-              </div>
-            ) : productId ? <p className="hint mt-1 text-warning">Bu ürün için doğrulanmış teklif yok.</p> : null}
+            <input className="input" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Örn: Lansman, satış, farkındalık" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Başlangıç</label><input className="input" type="date" value={start} onChange={(e)=>setStart(e.target.value)}/></div>
-            <div><label className="label">Bitiş</label><input className="input" type="date" value={end} onChange={(e)=>setEnd(e.target.value)}/></div>
+            <div><label className="label">Başlangıç</label><input className="input" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+            <div><label className="label">Bitiş</label><input className="input" type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
           </div>
           <div>
             <label className="label">Platformlar</label>
             <div className="flex flex-wrap gap-1.5">
-              {['INSTAGRAM','FACEBOOK','X','LINKEDIN','TIKTOK','YOUTUBE','PINTEREST'].map((p)=>(
-                <button key={p} onClick={()=> setPlatforms((prev)=> prev.includes(p) ? prev.filter((x)=>x!==p) : [...prev,p])} className={`chip ${platforms.includes(p)?'chip-active':''}`}>{p}</button>
+              {PLATFORM_OPTIONS.map((p) => (
+                <button key={p} onClick={() => togglePlatform(p)} className={`chip ${platforms.includes(p) ? 'chip-active' : ''}`}>{p}</button>
               ))}
             </div>
           </div>
-          <button className="btn-primary btn-md w-full" onClick={handleGenerate} disabled={busy}>{busy ? <Spinner size={15}/> : <Icon name="target" size={15}/>} Kampanya Oluştur</button>
-          <p className="hint">AI yalnızca öneri üretir. Yayın öncesi onay akışı aynen çalışır.</p>
+          <div>
+            <label className="label">Gerçek kampanya bilgileri (opsiyonel)</label>
+            <textarea className="textarea min-h-[70px]" value={userFacts} onChange={(e) => setUserFacts(e.target.value)} placeholder="Örn: %20 indirim, 20.09.2026'ya kadar geçerli" />
+            <p className="hint mt-1">Buraya yazdığınız bilgiler aynen korunur; AI fiyat/tarih eklemez.</p>
+          </div>
+          <button className="btn-primary btn-md w-full" onClick={handleGenerate} disabled={busy || platforms.length === 0}>
+            {busy ? <Spinner size={15} /> : <Icon name="target" size={15} />} Konsept Oluştur
+          </button>
+          <p className="hint">AI yalnızca öneri üretir. Kampanya kaydı, mevcut kampanya sisteminize eklenir.</p>
         </div>
 
         <div className="space-y-4">
           {!concept ? (
             <div className="card flex flex-col items-center justify-center p-10 text-center">
-              <Icon name="target" size={28} className="text-ink-faint"/>
-              <p className="mt-2 font-semibold">Henüz kampanya yok</p>
-              <p className="text-[13px] text-ink-muted">Soldan bilgileri doldurup oluşturun. AI marka kitinizdeki slogan, CTA ve hashtagleri kullanır.</p>
+              <Icon name="target" size={28} className="text-ink-faint" />
+              <p className="mt-2 font-semibold">Henüz kampanya konsepti yok</p>
+              <p className="text-[13px] text-ink-muted">Soldan bilgileri doldurup konsept oluşturun. Marka kitinizdeki slogan, CTA ve hashtagler kullanılır.</p>
             </div>
           ) : (
             <>
@@ -96,11 +169,10 @@ export function AiCampaignView({ brands, demoMode }: { brands: any[]; demoMode: 
                 <div className="mt-3 rounded-lg border border-line bg-surface-subtle p-3">
                   <p className="text-[12px] font-semibold">Ana Mesaj</p>
                   <p className="text-[13.5px]">{concept.keyMessage}</p>
-                  {offer ? <p className="mt-1 text-[11px] text-ink-faint">Fiyat kaynağı: CampaignOffer #{offer.id} — {formatOffer(offer)}</p> : null}
                 </div>
                 <div className="mt-3">
                   <p className="label">İçerik Sütunları</p>
-                  <div className="flex flex-wrap gap-1.5">{concept.pillars.map((p:string)=><span key={p} className="chip chip-active">{p}</span>)}</div>
+                  <div className="flex flex-wrap gap-1.5">{concept.pillars.map((p) => <span key={p} className="chip chip-active">{p}</span>)}</div>
                 </div>
               </div>
 
@@ -108,15 +180,15 @@ export function AiCampaignView({ brands, demoMode }: { brands: any[]; demoMode: 
                 <div className="card p-4">
                   <h3 className="section-title">Platform Stratejisi</h3>
                   <ul className="mt-2 space-y-1.5">
-                    {Object.entries(concept.platformStrategy).map(([k,v])=>(
-                      <li key={k} className="text-[13px]"><strong>{k}:</strong> {v as string}</li>
+                    {Object.entries(concept.platformStrategy).map(([k, v]) => (
+                      <li key={k} className="text-[13px]"><strong>{k}:</strong> {v}</li>
                     ))}
                   </ul>
                 </div>
                 <div className="card p-4">
-                  <h3 className="section-title">Takvim Önizleme</h3>
+                  <h3 className="section-title">Yayın Yapısı</h3>
                   <ul className="mt-2 space-y-1.5">
-                    {concept.calendar.map((c:any,i:number)=>(
+                    {concept.calendar.map((c, i) => (
                       <li key={i} className="flex items-center gap-2 text-[12.5px]"><Badge tone="neutral">{c.platform}</Badge> {c.date} — {c.topic}</li>
                     ))}
                   </ul>
@@ -126,20 +198,29 @@ export function AiCampaignView({ brands, demoMode }: { brands: any[]; demoMode: 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="card p-4">
                   <h3 className="section-title">Kreatif Konseptler</h3>
-                  <ul className="mt-2 list-disc pl-5 text-[13px]">{concept.creativeConcepts.map((c:string,i:number)=><li key={i}>{c}</li>)}</ul>
+                  <ul className="mt-2 list-disc pl-5 text-[13px]">{concept.creativeConcepts.map((c, i) => <li key={i}>{c}</li>)}</ul>
                 </div>
                 <div className="card p-4">
-                  <h3 className="section-title">Caption & Hashtag</h3>
-                  <ul className="mt-2 space-y-1 text-[13px]">{concept.captionConcepts.map((c:string,i:number)=><li key={i}>• {c}</li>)}</ul>
-                  <div className="mt-2 flex flex-wrap gap-1">{concept.hashtagStrategy.map((h:string)=><span key={h} className="chip">{h}</span>)}</div>
+                  <h3 className="section-title">Mesaj & Hashtag Fikirleri</h3>
+                  <ul className="mt-2 space-y-1 text-[13px]">{concept.captionConcepts.map((c, i) => <li key={i}>• {c}</li>)}</ul>
+                  <div className="mt-2 flex flex-wrap gap-1">{concept.hashtagStrategy.map((h) => <span key={h} className="chip">{h}</span>)}</div>
                   <p className="hint mt-1">CTA stratejisi: {concept.ctaStrategy.join(' • ')}</p>
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <button className="btn-primary btn-md" onClick={()=>toast.success('Plan oluşturuldu','Kampanya takvimi taslak olarak eklendi.')}>Takvimi Oluştur</button>
-                <button className="btn-secondary btn-md" onClick={()=>toast.success('İçerikler hazır','Onay akışına gönderildi.')}>İçerikleri Taslakla</button>
-              </div>
+              {created ? (
+                <div className="card border-success/30 bg-success/5 p-4">
+                  <p className="text-[13.5px] font-bold text-success">Kampanya kaydedildi: {created.name} ({created.code})</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <a className="btn-secondary btn-sm" href={`/app/takvim?campaign=${created.campaignId}`}>Takvimde gör</a>
+                    <a className="btn-ghost btn-sm" href="/app/ai-planlayici">AI Planlayıcı ile plan üret</a>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn-primary btn-md" onClick={handleCreate} disabled={busy}>
+                  {busy ? <Spinner size={14} /> : <Icon name="check-circle" size={15} />} Kampanyayı Sisteme Kaydet
+                </button>
+              )}
             </>
           )}
         </div>
