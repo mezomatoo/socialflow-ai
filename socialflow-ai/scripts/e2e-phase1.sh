@@ -198,21 +198,25 @@ assert len(d['platformContents']) == 5
 assert len(d['versions']) >= 1
 "
 
-step "11) YAYINLAMA KAPALI MI? (Faz 2)"
+step "11) YAYINLAMA AÇIK MI? (Faz 2 — preflight yanıt vermeli)"
 curl -s -b "$JAR" -X POST "$API/contents/$CONTENT/publish" -H 'content-type: application/json' -H "x-csrf-token: $CSRF" -d '{}' | python3 -c "
 import json,sys
-e=json.load(sys.stdin).get('error',{})
-print('  ', e.get('code'), '|', e.get('message'))
-assert e.get('code') == 'MODULE_NOT_ENABLED', e
+r=json.load(sys.stdin)
+# Ya 'ok' ya da doğrulama hatası (BAD_REQUEST) beklenir; MODULE_NOT_ENABLED artık beklenmez.
+code=r.get('error',{}).get('code','OK') if not r.get('ok') else 'OK'
+print('  publish yanıtı:', code)
+assert code != 'MODULE_NOT_ENABLED', r
 "
 
-step "12) KAPATILMIŞ MODÜL UÇ NOKTALARI"
+step "12) MODÜL KAPI DURUMLARI (Faz 2)"
 curl -s -b "$JAR" "$API/bootstrap" -H "x-csrf-token: $CSRF" | python3 -c "
 import json,sys
 m=json.load(sys.stdin)['data'].get('modules', {})
 print('  modüller:', ', '.join(f\"{k}={'açık' if v['enabled'] else 'kapalı'}\" for k,v in sorted(m.items())))
-assert m.get('notifications',{}).get('enabled') is False, m.get('notifications')
-assert m.get('aiAssistant',{}).get('enabled') is False, m.get('aiAssistant')
+assert m.get('socialPublishing',{}).get('enabled') is True, m.get('socialPublishing')
+assert m.get('scheduling',{}).get('enabled') is True, m.get('scheduling')
+assert m.get('socialAccounts',{}).get('enabled') is True, m.get('socialAccounts')
+assert m.get('analytics',{}).get('enabled') is False, m.get('analytics')
 "
 probe_gate() { # probe_gate <yöntem> <yol>
   local method="$1" path="$2" code body
@@ -226,13 +230,8 @@ probe_gate() { # probe_gate <yöntem> <yol>
   echo "  $method $path -> $code $body"
   if [ "$code" != "501" ]; then echo "  ✗ $path kapatılmalıydı (501)"; FAIL=1; fi
 }
-probe_gate POST ai/generate
-probe_gate POST ai/hashtags
-probe_gate POST ai/timing
-probe_gate GET notifications
-probe_gate POST notifications/read-all
 probe_gate GET analytics/summary
-probe_gate GET accounts
+probe_gate GET analytics/daily
 
 rm -f "$JAR" "$ADAPT" "$MEDIA_JSON" "$VARIANT_JSON" "$GATE_JSON" /tmp/sf-e2e-story.jpg /tmp/sf-e2e-validate.json /tmp/sf-e2e-over.json
 printf '\n'

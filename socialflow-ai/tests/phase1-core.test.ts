@@ -205,33 +205,48 @@ describe('Faz 1 — medya varyantları ve silme güvenliği', () => {
   });
 });
 
-describe('Faz 1 — kapsam kapıları (sahte çalışma yok)', () => {
-  it('Faz 2 modülleri varsayılan olarak kapalı ve dürüst mesaj veriyor', () => {
+describe('Faz 2 — kapsam kapıları (sahte çalışma yok)', () => {
+  it('Faz 2 modülleri (yayınlama, zamanlama, hesaplar, bildirimler) varsayılan AÇIK', () => {
     const state = moduleState();
-    assert.equal(state.socialPublishing.enabled, false);
-    assert.equal(state.scheduling.enabled, false);
-    assert.equal(state.socialAccounts.enabled, false);
+    assert.equal(state.socialPublishing.enabled, true);
+    assert.equal(state.scheduling.enabled, true);
+    assert.equal(state.socialAccounts.enabled, true);
+    assert.equal(state.notifications.enabled, true);
+  });
+
+  it('daha sonraki fazlara ait modüller kapalı ve dürüst mesaj veriyor', () => {
+    const state = moduleState();
     assert.equal(state.analytics.enabled, false);
-    assert.ok(state.socialPublishing.notice.includes('Faz 2'));
+    assert.equal(state.automation.enabled, false);
     assert.ok(moduleNotice('analytics').length > 10);
+    assert.ok(state.analytics.notice.includes('Faz 4'));
   });
 
   it('kapalı modül 501 (MODULE_NOT_ENABLED) hatası verir — sahte başarı yok', () => {
     assert.throws(
-      () => assertModuleEnabled('socialPublishing'),
+      () => assertModuleEnabled('analytics'),
       (err: unknown) => err instanceof AppError && err.code === 'MODULE_NOT_ENABLED' && err.status === 501
     );
   });
 
-  it('bayrak açıldığında modül etkinleşir (Faz 2 yolu korunmuş)', () => {
-    process.env.FF_SOCIAL_PUBLISHING = 'true';
+  it('bayrakla modül kapatılabilir/açılabilir (env override korunmuş)', () => {
+    process.env.FF_SOCIAL_PUBLISHING = 'false';
     try {
-      assert.equal(isModuleEnabled('socialPublishing'), true);
-      assert.doesNotThrow(() => assertModuleEnabled('socialPublishing'));
+      assert.equal(isModuleEnabled('socialPublishing'), false);
+      assert.throws(() => assertModuleEnabled('socialPublishing'));
     } finally {
       delete process.env.FF_SOCIAL_PUBLISHING;
     }
-    assert.equal(isModuleEnabled('socialPublishing'), false);
+    assert.equal(isModuleEnabled('socialPublishing'), true);
+
+    process.env.FF_ANALYTICS = 'true';
+    try {
+      assert.equal(isModuleEnabled('analytics'), true);
+      assert.doesNotThrow(() => assertModuleEnabled('analytics'));
+    } finally {
+      delete process.env.FF_ANALYTICS;
+    }
+    assert.equal(isModuleEnabled('analytics'), false);
   });
 
   it('tüm kapılar faz numarası ve Türkçe etiket taşır', () => {

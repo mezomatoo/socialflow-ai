@@ -2,17 +2,21 @@
  * Faz kapıları (§3, §5)
  * ---------------------------------------------------------------------------
  * Uygulamada Faz 2–6 için yazılmış altyapı kodu bulunur (yayınlama, kuyruk,
- * analitik, bildirim, OAuth bağlantıları, otomasyon). Faz 1 KURALI: bu modüller
- * çalışıyormuş gibi SUNULMAZ. Kaldırmak yerine MERKEZİ TEK KAPI üzerinden
- * kapatılırlar; böylece:
- *   - arayüzde "çalışıyor" izlenimi veren sahte başarı yoktur,
- *   - kod korunur ve ilgili faz açıldığında tek bayrakla devreye girer,
- *   - kapı kararı kullanıcı arayüzünde değil tek doğruluk kaynağında verilir.
+ * analitik, bildirim, OAuth bağlantıları, otomasyon). KURAL: bir modül, ait
+ * olduğu faz teslim edilmeden "çalışıyormuş gibi" SUNULMAZ. Kapı kararı
+ * kullanıcı arayüzünde değil, buradaki tek doğruluk kaynağında verilir.
  *
- * Bayrak: `FF_<MODÜL>` (true/1) ile geçersiz kılınabilir. Varsayılanlar Faz 1
- * için bilinçli olarak KAPALI seçilmiştir.
+ * Faz 2 teslimi ile sosyal yayınlama, zamanlama (kuyruk/worker), hesap
+ * bağlama ve bildirim merkezi gerçek ve testli hale geldiği için
+ * `CURRENT_PHASE = 2` üzerine oturan modüller artık varsayılan AÇIKTIR.
+ * Daha sonraki fazlara ait modüller dürüst bilgilendirmeyle KAPALI kalır.
+ *
+ * Bayrak: `FF_<MODÜL>` (true/1/false/0) ile geçersiz kılınabilir.
  */
 import { AppError } from '../errors';
+
+/** Uygulamada teslim edilmiş en yüksek faz (Faz 2: gerçek yayınlama + planlama + hesaplar). */
+export const CURRENT_PHASE = 2;
 
 export type ModuleId =
   | 'socialPublishing'
@@ -35,9 +39,9 @@ export interface ModuleGate {
   /** Modülün ait olduğu faz. */
   phase: 2 | 3 | 4 | 5 | 6;
   label: string;
-  /** Faz 1'de varsayılan olarak kapalı mı? */
+  /** Faz 1 modunda (CURRENT_PHASE=1) varsayılan olarak açık mı? */
   enabledInPhase1: boolean;
-  /** Kullanıcıya gösterilecek dürüst bilgilendirme. */
+  /** Modül kapalıyken (ör. FF_...=false) gösterilecek dürüst bilgilendirme. */
   notice: string;
 }
 
@@ -47,21 +51,21 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     phase: 2,
     label: 'Sosyal Medyada Yayınlama',
     enabledInPhase1: false,
-    notice: 'Gerçek sosyal medya yayını Faz 2’de etkinleşecek. İçeriklerinizi şimdi hazırlayıp taslak olarak saklayabilirsiniz.'
+    notice: 'Gerçek sosyal medya yayını bu kurulumda kapalı (FF_SOCIAL_PUBLISHING=false). İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'
   },
   scheduling: {
     id: 'scheduling',
-    phase: 3,
+    phase: 2,
     label: 'Zamanlama ve Otomatik Yayın',
     enabledInPhase1: false,
-    notice: 'Zamanlanmış otomatik yayın Faz 3’te etkinleşecek. Faz 1’de içerikler taslak/hazır durumunda saklanır.'
+    notice: 'Zamanlanmış otomatik yayın bu kurulumda kapalı (FF_SCHEDULING=false). İçerikler taslak/hazır durumunda saklanır.'
   },
   socialAccounts: {
     id: 'socialAccounts',
     phase: 2,
     label: 'Hesap Bağlama (OAuth)',
     enabledInPhase1: false,
-    notice: 'Sosyal hesap bağlama Faz 2’de etkinleşecek. Şimdilik hedefleri hesap seçmeden de hazırlayabilirsiniz.'
+    notice: 'Sosyal hesap bağlama bu kurulumda kapalı (FF_SOCIAL_ACCOUNTS=false).'
   },
   analytics: {
     id: 'analytics',
@@ -72,10 +76,10 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
   },
   notifications: {
     id: 'notifications',
-    phase: 3,
+    phase: 2,
     label: 'Bildirimler',
     enabledInPhase1: false,
-    notice: 'Bildirim merkezi Faz 3’te etkinleşecek.'
+    notice: 'Bildirim merkezi bu kurulumda kapalı (FF_NOTIFICATIONS=false).'
   },
   aiAssistant: {
     id: 'aiAssistant',
@@ -147,11 +151,16 @@ function envKey(id: ModuleId): string {
   return 'FF_' + id.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
 }
 
-/** Modül açık mı? (env override > faz varsayılanı) */
+/**
+ * Modül açık mı? (env override > faz varsayılanı)
+ * Faz varsayılanı: modülün fazı, teslim edilen güncel faza (CURRENT_PHASE)
+ * eşit veya ondan küçükse AÇIK; aksi halde Kapalı.
+ */
 export function isModuleEnabled(id: ModuleId): boolean {
   const raw = process.env[envKey(id)];
   if (raw !== undefined && raw !== '') return raw === 'true' || raw === '1';
-  return MODULE_GATES[id].enabledInPhase1;
+  const gate = MODULE_GATES[id];
+  return gate.enabledInPhase1 || gate.phase <= CURRENT_PHASE;
 }
 
 export function moduleNotice(id: ModuleId): string {

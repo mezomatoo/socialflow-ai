@@ -296,11 +296,11 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
     const report = await runPreflight(contentId, workspaceId);
     assert.ok(report);
     assert.equal(typeof report!.blocking, 'boolean');
-    // Faz 1'de yayınlama kapalıdır: içerik platform kurallarına uygun olmalı ve
-    // hesap bağlama eksikliği ENGELLEYİCİ olmamalıdır (§3 dürüstlük).
-    assert.equal(report!.phase1Mode, true);
+    // Faz 2 ile yayınlama açıldı: hesap bağlama eksikliği artık ENGELLEYİCİDİR
+    // (yayın denemesi gerçek hesap olmadan yapılamaz; §3 dürüstlük korunur).
+    assert.equal(report!.phase1Mode, false);
     assert.equal(report!.contentReadyCount, report!.totalCount, 'tüm hedefler içerik olarak uygun olmalı');
-    assert.equal(report!.blocking, false, 'Faz 1 içerik kontrolü engellememeli');
+    assert.equal(report!.blocking, true, 'Faz 2’de bağlı hesap eksikliği engellemelidir');
     assert.ok(report!.totalCount >= 5);
     assert.ok(Array.isArray(report!.targets));
     assert.equal(report!.targets.length, report!.totalCount);
@@ -374,8 +374,9 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
       assert.equal(t.publishedAt, null);
     }
 
-    // Yayınlama modülü Faz 1'de kapalı olduğundan yayın ucu 501 döner.
-    const { assertModuleEnabled } = await import('../src/lib/phase/phaseGates');
-    assert.throws(() => assertModuleEnabled('socialPublishing'));
+    // Faz 2 ile yayınlama modülü açıldı; yalnızca henüz gelmeyen fazlar kapalı kalır.
+    const { assertModuleEnabled, isModuleEnabled } = await import('../src/lib/phase/phaseGates');
+    assert.doesNotThrow(() => assertModuleEnabled('socialPublishing'));
+    assert.equal(isModuleEnabled('analytics'), false, 'Analitik hâlâ Faz 4 kapsamında kapalı olmalı');
   });
 });
