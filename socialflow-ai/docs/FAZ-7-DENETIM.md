@@ -44,8 +44,8 @@
 | AI Planlayıcı (ContentPlan, Takvime Ekle→taslak) | WORKING | NO ACTION |
 | AI Kampanya (kanonik Campaign) | WORKING | NO ACTION |
 | Otomasyon motoru (kural, yürütme, döngü koruması) | WORKING (`0343666`) | NO ACTION |
-| **Trendler** | **DEMO DATA ONLY** — `trends/service.ts` her zaman `demoTrends` döner; hatta `providerConfigured:true` dalında bile sahte | **REPLACE: üretimde yalnız gerçek durum (kaynak yok → "yapılandırılmadı")** |
-| **Rakip Analizi** | **MOCK ONLY** — `competitor/service.ts` sabit `mockCompetitors/mockInsights`, görünüm bunu çizer | **REPLACE: sahte veriyi kaldır, dürüst boş/unavailable durumu** |
+| **Trendler** | WORKING (DÜRÜST MOD) — `demoTrends` kaldırıldı; sağlayıcı yoksa boş liste + uyarı | COMPLETE (sağlayıcı bağlanınca gerçek veri) |
+| **Rakip Analizi** | WORKING (DÜRÜST MOD) — `mockCompetitors/mockInsights` + sahte fırsat maddeleri kaldırıldı | COMPLETE (sağlayıcı bağlanınca gerçek veri) |
 | Semantik arama | **DEAD CODE (DEMO)** — `search/semantic.ts` `demoIndex`; gerçek arama `/api/v1/search` zaten DB-backed ve workspace izoleli | **REMOVE PLACEHOLDER** |
 | `ai/creative.ts` + `creativeQuality.ts` | DEAD CODE (importer yok) | REMOVE |
 | `prisma-mock.ts` | DEAD CODE (importer yok) | REMOVE |

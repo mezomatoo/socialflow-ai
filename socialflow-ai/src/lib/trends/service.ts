@@ -1,7 +1,13 @@
 /**
- * PHASE 4 — Trend İstihbaratı (§94-§96)
- * Güvenli: canlı trendler yalnızca resmi/lisanslı sağlayıcıdan; yoksa kullanıcıya
- * "Canlı trend veri kaynağı yapılandırılmadı." mesajı gösterilir. Asla sahte trend uydurulmaz.
+ * PHASE 4 — Trend İstihbaratı (§94-§96) — DÜRÜST MOD (Faz 7 §13/§90)
+ * ---------------------------------------------------------------------------
+ * Canlı trendler YALNIZCA resmî/lisanslı bir sağlayıcı yapılandırıldığında
+ * gösterilir. Bu kurulumda böyle bir sağlayıcı HENÜZ YOKTUR; bu yüzden servis
+ * boş liste + dürüst uyarı döner. SAHTE/DEMO TREND ÜRETİLMEZ (§13): sağlayıcı
+ * yokken veri yok demek, uydurma veri göstermekten doğrudur.
+ *
+ * Sağlayıcı entegre edildiğinde `isTrendProviderConfigured()` gerçek env /
+ * ProviderIntegration kontrolüne bağlanır ve `listTrends` o sağlayıcıdan okur.
  */
 
 export interface TrendItem {
@@ -16,29 +22,30 @@ export interface TrendItem {
   source: string;
 }
 
-const demoTrends: TrendItem[] = [
-  { id: 't1', title: '#filtrekahve', description: 'Filtre kahve aramalarında %32 artış', platform: 'INSTAGRAM', category: 'Kahve', relevance: 0.92, freshness: 0.88, opportunity: 'Reels ile demleme rehberi', source: 'DEMO' },
-  { id: 't2', title: 'Sürdürülebilir ambalaj', description: 'Çevre dostu ambalaj konuşmaları artıyor', platform: 'TIKTOK', category: 'Sürdürülebilirlik', relevance: 0.84, freshness: 0.76, opportunity: 'Hikaye serisi', source: 'DEMO' },
-  { id: 't3', title: 'Soğuk demleme yaz trendi', description: 'Cold brew etkileşimi yüksek', platform: 'INSTAGRAM', category: 'İçecek', relevance: 0.78, freshness: 0.91, opportunity: 'Carousel post', source: 'DEMO' },
-];
+export interface TrendListResult {
+  items: TrendItem[];
+  providerConfigured: boolean;
+  warning?: string;
+}
+
+export const TREND_PROVIDER_WARNING =
+  'Canlı trend veri kaynağı yapılandırılmadı. Trendler yalnızca resmî/lisanslı bir sağlayıcı bağlandığında gösterilir; sahte trend verisi üretilmez.';
 
 export function isTrendProviderConfigured(): boolean {
-  // Gerçekte env / ProviderIntegration kontrolü
-  return false; // demo: yapılandırılmadı
+  // Gerçek sağlayıcı entegrasyonu henüz yoktur (§90: kaynaksız trend = trend yok).
+  return false;
 }
 
-export async function listTrends(workspaceId: string, brandId?: string): Promise<{ items: TrendItem[]; providerConfigured: boolean; warning?: string }> {
+export async function listTrends(_workspaceId: string, _brandId?: string): Promise<TrendListResult> {
   const providerConfigured = isTrendProviderConfigured();
   if (!providerConfigured) {
-    return {
-      items: demoTrends, // demo verisi — etiketle
-      providerConfigured: false,
-      warning: 'Canlı trend veri kaynağı yapılandırılmadı. Aşağıdaki örnek veriler demo amaçlıdır.',
-    };
+    return { items: [], providerConfigured: false, warning: TREND_PROVIDER_WARNING };
   }
-  return { items: demoTrends, providerConfigured: true };
+  // Ulaşılamaz dal: gerçek sağlayıcı bağlandığında burada o sağlayıcıdan okunur.
+  return { items: [], providerConfigured: true };
 }
 
+/** Saf skor yardımcısı — gerçek sağlayıcı verisi geldiğinde sıralama için kullanılır. */
 export function trendRelevanceScore(trend: TrendItem, brandKeywords: string[]): number {
   const kw = brandKeywords.join(' ').toLowerCase();
   const titleMatch = kw.includes(trend.title.toLowerCase()) ? 0.2 : 0;

@@ -1,6 +1,9 @@
 /**
- * PHASE 4 — Rakip İstihbaratı (§97-§99)
- * Yalnızca resmi / izinli / lisanslı veri. Güvensiz scraping yok.
+ * PHASE 4 — Rakip İstihbaratı (§97-§99) — DÜRÜST MOD (Faz 7 §13/§90)
+ * ---------------------------------------------------------------------------
+ * Yalnızca resmî / izinli / lisanslı veri. Güvensiz scraping yok.
+ * Bu kurulumda rakip veri kaynağı HENÜZ YOKTUR; servis boş liste döner.
+ * SAHTE RAKİP / SAHTE İÇGÖRÜ ÜRETİLMEZ (§13) — sahte rakip dizileri kaldırıldı.
  */
 
 export interface CompetitorProfile {
@@ -19,29 +22,21 @@ export interface CompetitorInsight {
   description?: string | null;
 }
 
-const mockCompetitors: CompetitorProfile[] = [
-  { id: 'comp-1', name: 'Rakip Kahve', handle: '@rakipkahve', platform: 'INSTAGRAM', website: 'https://rakip.example.com' },
-  { id: 'comp-2', name: 'Premium Roasters', handle: '@premiumroasters', platform: 'TIKTOK' },
-];
+export const COMPETITOR_WARNING =
+  'Rakip verileri yalnızca resmi API / lisanslı sağlayıcı veya sizin eklediğiniz verilerle beslenir. İzinsiz kazıma yapılmaz. Veri kaynağı henüz yapılandırılmadığı için liste boştur; sahte rakip verisi gösterilmez.';
 
-const mockInsights: CompetitorInsight[] = [
-  { id: 'ins-1', competitorId: 'comp-1', type: 'GAP', title: 'Eğitici içerik boşluğu', description: 'Rakip eğitici Reels paylaşmıyor — fırsat.' },
-  { id: 'ins-2', competitorId: 'comp-1', type: 'OPPORTUNITY', title: 'Sabah rutini serisi', description: 'Hedef kitlenin sabah rutini ilgisi yüksek.' },
-];
-
-export async function listCompetitors(workspaceId: string): Promise<CompetitorProfile[]> {
-  return mockCompetitors;
+export async function listCompetitors(_workspaceId: string): Promise<CompetitorProfile[]> {
+  return [];
 }
 
-export async function listInsights(workspaceId: string, competitorId?: string): Promise<CompetitorInsight[]> {
-  if (competitorId) return mockInsights.filter((i) => i.competitorId === competitorId);
-  return mockInsights;
+export async function listInsights(_workspaceId: string, competitorId?: string): Promise<CompetitorInsight[]> {
+  if (competitorId) return [];
+  return [];
 }
 
+/** Saf boşluk analizi — gerçek konu verisiyle beslendiğinde fırsat üretir. */
 export function contentGapAnalysis(input: { existingTopics: string[]; competitorTopics: string[]; trendTopics: string[] }): { opportunities: string[] } {
   const all = new Set([...input.competitorTopics, ...input.trendTopics]);
   const missing = [...all].filter((t) => !input.existingTopics.includes(t));
   return { opportunities: missing.slice(0, 5) };
 }
-
-export const COMPETITOR_WARNING = 'Rakip verileri yalnızca resmi API / lisanslı sağlayıcı veya sizin eklediğiniz verilerle beslenir. İzinsiz kazıma yapılmaz.';
