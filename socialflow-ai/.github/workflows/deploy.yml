@@ -1,0 +1,200 @@
+# SocialFlow AI — Sürekli Dağıtım (Faz 7 §23-§28)
+# ---------------------------------------------------------------------------
+# Kontrollü dağıtım: yalnızca ELLE tetiklenir (workflow_dispatch), seçilen
+# ortam için tam doğrulama zincirini çalıştırır, inşa artefaktını kaydeder ve
+# yapılandırılmış dağıtım kancasına (deploy webhook) iletir. Dağıtım hedefi
+# YAPILANDIRILMAMIŞSA iş GERÇEK başarısızlıkla biter — sahte "dağıtıldı"
+# bildirimi YOKTUR (§75, §154).
+#
+# Ortam ayrımı (§23):
+#   - staging:    GitHub Environment "staging"
+#   - production: GitHub Environment "production" (zorunlu inceleme onayı
+#                 depo ayarlarından açılmalıdır — Settings → Environments →
+#                 production → Required reviewers)
+#
+# İzlenebilirlik (§28): her dağıtım; Git commit'i, koşu kimliği, zaman damgası
+# ve ortam bilgisiyle GitHub Deployment kaydına işlenir.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Dağıtım ortamı'
+        type: choice
+        options: [staging, production]
+        required: true
+      ref:
+        description: 'Dağıtılacak commit (boş = dal ucu)'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  deployments: write
+
+# Aynı ortama üst üste dağıtım engellenir; koşular sıraya girer (§25).
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-package:
+    name: Doğrulama ve paketleme
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: development
+      DATABASE_URL: 'file:./prisma/dev.db'
+      TEST_DATABASE_URL: 'file:./prisma/test.db'
+    steps:
+      - name: Depo checkout (dağıtılacak commit)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılık kurulumu (lockfile zorunlu)
+        run: npm ci
+
+      - name: Prisma istemci üretimi
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test veritabanı kurulumu
+        run: npm run test:setup
+
+      - name: Testler
+        run: npm test
+
+      - name: Üretim build'i
+        run: npm run build
+
+      # Migration ön kontrolü (§63): şema, ATIK bir SQLite'a uygulanır;
+      # üretim veritabanına DOKUNULMAZ (§62). PostgreSQL doğrulaması, gerçek
+      # PG adresi MIGRATION_CHECK_URL secret'ı verilmişse onun ÜZERİNDE
+      # AYRI bir doğrulama veritabanıyla yapılmalıdır.
+      - name: Migration ön kontrolü (atık veritabanı)
+        run: npm run db:push -- --url file:./prisma/migration-check.db --reset
+
+      - name: Paketleme + izlenebilirlik künyesi (§28)
+        run: |
+          mkdir -p artifact
+          cp -r .next artifact/.next
+          cp -r public artifact/public 2>/dev/null || true
+          cp package.json package-lock.json next.config.js artifact/ 2>/dev/null || true
+          {
+            echo '{'
+            echo "  \"commit\": \"${{ inputs.ref || github.sha }}\","
+            echo "  \"environment\": \"${{ inputs.environment }}\","
+            echo "  \"runId\": \"${{ github.run_id }}\","
+            echo "  \"builtAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"node\": \"$(node --version)\""
+            echo '}' > artifact/build-meta.json
+          } && cat artifact/build-meta.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: socialflow-build-${{ inputs.environment }}-${{ github.run_id }}
+          path: artifact/
+          retention-days: 14
+
+  deploy:
+    name: Dağıt (${{ inputs.environment }})
+    needs: verify-and-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_WEBHOOK: ${{ inputs.environment == 'staging' && secrets.STAGING_DEPLOY_WEBHOOK || secrets.PRODUCTION_DEPLOY_WEBHOOK }}
+      APP_URL: ${{ inputs.environment == 'staging' && secrets.STAGING_APP_URL || secrets.PRODUCTION_APP_URL }}
+    steps:
+      - name: Dağıtım kaydı aç (§27/§28)
+        run: |
+          DEPLOYMENT_ID=$(gh api "repos/${{ github.repository }}/deployments" \
+            -f ref="${{ inputs.ref || github.sha }}" \
+            -f environment="${{ inputs.environment }}" \
+            -f auto_merge=false \
+            -f required_contexts='[]' \
+            --jq '.id')
+          echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          gh api "repos/${{ github.repository }}/deployments/$DEPLOYMENT_ID/statuses" \
+            -f state=in_progress \
+            -f "description=Doğrulama tamamlandı; dağıtım başladı (koşu ${{ github.run_id }})"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Dağıtım hedefi yapılandırma kontrolü — dürüst başarısızlık (§75/§154)
+        if: env.DEPLOY_WEBHOOK == ''
+        run: |
+          gh api "repos/${{ github.repository }}/deployments/${{ env.DEPLOYMENT_ID }}/statuses" \
+            -f state=failure \
+            -f "description=Dağıtım hedefi yapılandırılmadı (${{ inputs.environment }}): *_DEPLOY_WEBHOOK secret'ı yok. Yapılandırılmadan sahte dağıtım bildirilmez."
+          echo "::error::${{ inputs.environment }} ortamı için dağıtım hedefi yapılandırılmadı. Gerekli secret: ${{ inputs.environment == 'staging' && 'STAGING_DEPLOY_WEBHOOK' || 'PRODUCTION_DEPLOY_WEBHOOK' }} (+ APP_URL). docs/CD.md adresindeki sözleşmeyi uygulayın."
+          exit 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Dağıtım kancasını tetikle
+        run: |
+          HTTP_CODE=$(curl -sS -o /tmp/deploy-hook-resp.txt -w '%{http_code}' -X POST "$DEPLOY_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"commit\":\"${{ inputs.ref || github.sha }}\",\"environment\":\"${{ inputs.environment }}\",\"runId\":\"${{ github.run_id }}\"}")
+          echo "Kanca yanıtı: $HTTP_CODE"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            cat /tmp/deploy-hook-resp.txt || true
+            gh api "repos/${{ github.repository }}/deployments/${{ env.DEPLOYMENT_ID }}/statuses" \
+              -f state=failure -f "description=Dağıtım kancası $HTTP_CODE döndü"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Dağıtım sonrası duman testi (§146/§153)
+        if: env.APP_URL != ''
+        run: |
+          OK=0
+          for i in 1 2 3 4 5; do
+            sleep 10
+            L=$(curl -sS -o /dev/null -w '%{http_code}' "$APP_URL/api/health" || echo 000)
+            R=$(curl -sS -o /dev/null -w '%{http_code}' "$APP_URL/api/health/ready" || echo 000)
+            echo "Deneme $i — liveness: $L, readiness: $R"
+            if [ "$L" = "200" ] && [ "$R" = "200" ]; then OK=1; break; fi
+          done
+          if [ "$OK" != "1" ]; then
+            gh api "repos/${{ github.repository }}/deployments/${{ env.DEPLOYMENT_ID }}/statuses" \
+              -f state=failure -f "description=Duman testi başarısız: /api/health veya /api/health/ready 200 döndürmedi"
+            echo "::error::Duman testi başarısız — uygulama veya veritabanı hazır değil."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Dağıtım kaydını başarıyla kapat
+        if: success()
+        run: |
+          gh api "repos/${{ github.repository }}/deployments/${{ env.DEPLOYMENT_ID }}/statuses" \
+            -f state=success \
+            -f environment="${{ inputs.environment }}" \
+            -f "description=Commit ${{ inputs.ref || github.sha }} → ${{ inputs.environment }} (koşu ${{ github.run_id }})"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Dağıtım kaydını başarısızlıkla kapat
+        if: failure()
+        run: |
+          gh api "repos/${{ github.repository }}/deployments/${{ env.DEPLOYMENT_ID }}/statuses" \
+            -f state=failure \
+            -f "description=Dağıtım başarısız (koşu ${{ github.run_id }})" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
