@@ -51,7 +51,12 @@ export const CONTENT_STYLES = [
 export type ContentStyle = (typeof CONTENT_STYLES)[number];
 
 export const CONTENT_STATUS = [
+  // PHASE 1 çekirdek durumları
   'DRAFT',
+  'PROCESSING',
+  'READY',
+  'ARCHIVED',
+  // İleri fazlar için yapısal olarak hazır tutulan yayın durumları
   'SCHEDULED',
   'PUBLISHING',
   'PUBLISHED',
@@ -63,6 +68,9 @@ export type ContentStatus = (typeof CONTENT_STATUS)[number];
 
 export const PUBLISH_STATUS = [
   'DRAFT',
+  'PROCESSING',
+  'READY',
+  'ARCHIVED',
   'SCHEDULED',
   'PUBLISHING',
   'PUBLISHED',
@@ -81,6 +89,47 @@ export type IntegrationStatus = (typeof INTEGRATION_STATUS)[number];
 
 export const ROLES = ['OWNER', 'ADMIN', 'EDITOR', 'CREATOR', 'APPROVER', 'VIEWER'] as const;
 export type Role = (typeof ROLES)[number];
+
+/** İçeriğin kaynağı (§28). Phase 1 ağırlıklı olarak MANUAL ve AI_ASSISTED kullanır. */
+export const CONTENT_ORIGINS = [
+  'MANUAL',
+  'AI_ASSISTED',
+  'AI_GENERATED',
+  'IMPORTED',
+  'REPURPOSED'
+] as const;
+export type ContentOrigin = (typeof CONTENT_ORIGINS)[number];
+
+export const CONTENT_ORIGIN_LABELS: Record<ContentOrigin, string> = {
+  MANUAL: 'Elle oluşturuldu',
+  AI_ASSISTED: 'AI destekli',
+  AI_GENERATED: 'AI ile üretildi',
+  IMPORTED: 'İçe aktarıldı',
+  REPURPOSED: 'Yeniden kullanıldı'
+};
+
+/** Medya işleme durumları (§48) — Türkçe etiketlerle. */
+export const MEDIA_STATUS = ['UPLOADED', 'PROCESSING', 'READY', 'FAILED'] as const;
+export type MediaStatus = (typeof MEDIA_STATUS)[number];
+
+export const MEDIA_STATUS_LABELS: Record<MediaStatus, string> = {
+  UPLOADED: 'Yüklendi',
+  PROCESSING: 'İşleniyor',
+  READY: 'Hazır',
+  FAILED: 'Başarısız'
+};
+
+/** Kuyruk işleri (§74) — ağır işler istek/yanıt döngüsünden ayrılır. */
+export const QUEUE_JOB_TYPES = [
+  'ProcessMediaJob',
+  'GenerateMediaVariantJob',
+  'GeneratePlatformCaptionJob',
+  // İleri fazlar için hazır
+  'PublishContentJob',
+  'SyncAnalyticsJob',
+  'TokenRefreshJob'
+] as const;
+export type QueueJobType = (typeof QUEUE_JOB_TYPES)[number];
 
 export const HASHTAG_GROUPS = ['GENERAL', 'NICHE', 'BRAND', 'CAMPAIGN', 'LOCATION', 'TREND'] as const;
 export type HashtagGroup = (typeof HASHTAG_GROUPS)[number];
@@ -266,6 +315,9 @@ export const CONTENT_STYLE_LABELS: Record<ContentStyle, string> = {
 
 export const CONTENT_STATUS_LABELS: Record<ContentStatus, string> = {
   DRAFT: 'Taslak',
+  PROCESSING: 'İşleniyor',
+  READY: 'Hazır',
+  ARCHIVED: 'Arşivlendi',
   SCHEDULED: 'Planlandı',
   PUBLISHING: 'Yayınlanıyor',
   PUBLISHED: 'Yayınlandı',
@@ -276,6 +328,9 @@ export const CONTENT_STATUS_LABELS: Record<ContentStatus, string> = {
 
 export const PUBLISH_STATUS_LABELS: Record<PublishStatus, string> = {
   DRAFT: 'Taslak',
+  PROCESSING: 'İşleniyor',
+  READY: 'Hazır',
+  ARCHIVED: 'Arşivlendi',
   SCHEDULED: 'Planlandı',
   PUBLISHING: 'Yayınlanıyor',
   PUBLISHED: 'Yayınlandı',

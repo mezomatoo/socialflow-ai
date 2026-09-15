@@ -1,5 +1,5 @@
 import prisma from '../prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { brandKitInclude, type BrandKitAggregate } from './types';
 import { computeCompleteness } from './completeness';
 import { LOCK_MODES, CONSISTENCY_GATES, type LockMode, type ConsistencyGate } from './constants';

@@ -2,9 +2,16 @@ import { charLength, extractHashtagTokens, extractMentions, extractProtectedTerm
 import type { ContentType, PlatformCode } from '../platforms/platforms';
 import { PLATFORM_META } from '../platforms/platforms';
 import type { PlatformRuleView } from '../rules/ruleEngine';
-import { AI_SAFETY_RULES, completeJson } from './llmClient';
+import { AI_SAFETY_RULES, completeJson, consumeAiFailure, type AiFailureInfo } from './llmClient';
+import { adaptationProfile, targetLengthFor, type AdaptationProfile } from '../platforms/adaptationProfiles';
 import { applyStyleLocally, buildBrandVoicePrompt, type BrandVoiceInput } from './brandVoice';
-import { compressTurkish, verifyProtectedTerms, type Modification } from './semanticRewriter';
+import {
+  adjustEmojis,
+  compressTurkish,
+  factSentenceBudget,
+  verifyProtectedTerms,
+  type Modification
+} from './semanticRewriter';
 import { generateHashtags, appendHashtags, type HashtagSuggestion } from './hashtagService';
 
 /**
@@ -45,6 +52,8 @@ export interface AdaptationInput {
 
 export interface AdaptationOutput {
   caption: string;
+  /** Harici sağlayıcı denendi ve başarısız olduysa doldurulur (§69). */
+  aiFailure: AiFailureInfo | null;
   title?: string | null;
   hashtags: string[];
   hashtagBlock: string;
@@ -71,7 +80,11 @@ export interface AdaptationOutput {
 export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOutput> {
   const rule = input.rule;
   const limit = input.maximumLength || rule?.maxCaptionLength || 2200;
-  const preferred = input.preferredLength ?? rule?.recommendedCaptionLength ?? Math.min(limit, 500);
+  // Platform + içerik türüne özel YAZIM KURGUSU (§35–§37). Hikaye/Shorts gibi
+  // türler kısa, LinkedIn gibi türler profesyonel ve emojisiz yazılır.
+  const profile = adaptationProfile(String(input.platform), String(input.contentType));
+  const rulePreferred = input.preferredLength ?? rule?.recommendedCaptionLength ?? Math.min(limit, 500);
+  const preferred = targetLengthFor(profile, rulePreferred, limit);
   const platformMeta = PLATFORM_META[input.platform as PlatformCode];
   const warnings: string[] = [];
   const modifications: Modification[] = [];
@@ -98,17 +111,20 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
 
   // --- Hashtag bütçesi ------------------------------------------------------
   const maxHashtags = rule?.maxHashtags ?? 0;
-  const placement = input.hashtagPlacement ?? 'INLINE';
+  const placement = profile.hashtagPlacement ?? input.hashtagPlacement ?? 'INLINE';
   const hashtagsInline = placement === 'INLINE' && maxHashtags > 0;
 
+  // Platform profili hashtag bütçesini daraltabilir (ör. Hikaye: 1 etiket,
+  // X: 2, LinkedIn: 3). Kural üst sınırı her zaman geçerlidir.
+  const effectiveMaxHashtags = Math.max(0, Math.min(maxHashtags, profile.hashtagBudget));
   const hashtagResult = await generateHashtags({
     text: master,
     brandName: input.brandName,
     requiredHashtags: input.requiredHashtags,
     bannedHashtags: input.prohibitedTerms?.filter((t) => t.startsWith('#')).map((t) => t.replace('#', '')),
     campaignName: input.campaignName,
-    maxHashtags,
-    recommendedHashtags: rule?.recommendedHashtags ?? Math.min(maxHashtags, 4),
+    maxHashtags: effectiveMaxHashtags,
+    recommendedHashtags: Math.min(rule?.recommendedHashtags ?? 4, effectiveMaxHashtags),
     contentType: String(input.contentType)
   });
 
@@ -126,7 +142,9 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
   const bodyLimit = Math.max(40, limit - hashtagBudget);
 
   // --- CTA ------------------------------------------------------------------
-  const cta = buildCta(input, platformMeta?.name ?? String(input.platform), warnings);
+  // CTA tarzı platform profiline göre değişir: X/Hikaye kısa, LinkedIn kurumsal,
+  // Facebook sohbet tonunda (§37).
+  const cta = buildCta(input, platformMeta?.name ?? String(input.platform), profile, warnings);
   const ctaBudget = cta && placement !== 'SEPARATE' ? charLength(cta) + 2 : 0;
   const textLimit = Math.max(30, bodyLimit - ctaBudget);
 
@@ -139,14 +157,39 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
   // Metindeki hashtagleri gövdeden ayır (ayrı yönetiliyor)
   body = body.replace(/#[\p{L}\p{N}_]+/gu, ' ').replace(/\s{2,}/g, ' ').trim();
 
+  // Profil hedefi (ör. Hikaye için 160 karakter) aşılıyorsa metin MUTLAKA
+  // yeniden yazılır. Böylece aynı master metin tüm platformlarda aynı görünmez.
+  let profileTarget = Math.max(30, Math.min(preferred, textLimit));
+
+  // Cümle hedefi: X/Threads/Hikaye gibi türlerde master'ın tüm cümlelerini
+  // taşımak yerine en değerli cümleler seçilir. Korunan bilgiler (fiyat, tarih,
+  // zorunlu ifade) bu kısaltmada daima tutulur.
+  if (profile.sentenceTarget) {
+    const sentences = splitSentences(body);
+    if (sentences.length > profile.sentenceTarget) {
+      const avg = charLength(body) / Math.max(1, sentences.length);
+      const bySentences = Math.round(avg * profile.sentenceTarget * 1.15);
+      profileTarget = Math.max(
+        profile.minPreferredLength ?? 40,
+        Math.min(profileTarget, bySentences)
+      );
+      // Bilgi tabanı: kampanya bilgisi (fiyat/indirim/tarih/bağlantı) taşıyan
+      // TÜM cümleler sığmıyorsa hedef, bu cümleleri kapsayacak kadar yükseltilir.
+      // Sığmıyorsa kısaltma yine yapılır ve kullanıcı uyarılır (§35, §69).
+      const factFloor = factSentenceBudget(sentences, protectedTerms);
+      if (factFloor !== null && factFloor <= textLimit) {
+        profileTarget = Math.max(profileTarget, Math.min(factFloor, textLimit));
+      }
+    }
+  }
   const needsWork =
-    charLength(body) > textLimit ||
+    charLength(body) > profileTarget ||
     Boolean(input.style) ||
     (input.brandVoice?.bannedTerms?.length ?? 0) > 0;
 
   if (needsWork) {
     const llmResult = await tryLlmAdaptation(input, {
-      textLimit,
+      textLimit: profileTarget,
       protectedTerms,
       requiredMentions,
       style: input.style ?? 'PROFESSIONAL',
@@ -173,8 +216,13 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
       const style = (input.style ?? 'PROFESSIONAL') as any;
       body = applyStyleLocally(body, style, input.brandVoice);
 
-      if (charLength(body) > textLimit) {
-        const compressed = compressTurkish(body, textLimit, {
+      // Emoji düzeyi profile göre ayarlanır (LinkedIn: yok, TikTok: yoğun).
+      body = adjustEmojis(body, input.brandVoice?.emojiLevel
+        ? (input.brandVoice.emojiLevel as 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH')
+        : profile.emojiLevel);
+
+      if (charLength(body) > profileTarget) {
+        const compressed = compressTurkish(body, profileTarget, {
           protectedTerms,
           brandNames: input.brandName ? [input.brandName] : [],
           stripHashtags: true
@@ -185,8 +233,8 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
         modifications.push(...compressed.modifications);
         warnings.push(...compressed.warnings);
       }
-      if (compressedExtra(body, textLimit)) {
-        body = compressedExtra(body, textLimit)!;
+      if (compressedExtra(body, profileTarget)) {
+        body = compressedExtra(body, profileTarget)!;
         truncated = true;
         warnings.push('Metin sınıra sığmadığı için sözcük sınırından kısaltıldı.');
       }
@@ -265,6 +313,7 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
 
   return {
     caption,
+    aiFailure: consumeAiFailure(),
     title,
     hashtags: hashtagResult.selected.map((h) => h.tag),
     hashtagBlock,
@@ -299,23 +348,40 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildCta(input: AdaptationInput, platformName: string, warnings: string[]): string | null {
+function buildCta(
+  input: AdaptationInput,
+  platformName: string,
+  profile: AdaptationProfile,
+  _warnings: string[]
+): string | null {
   const rule = input.rule;
   const custom = input.defaultCta?.trim();
   const hasLink = Boolean(input.linkUrl?.trim() || extractUrls(input.masterCaption)[0]);
+
+  // Profil CTA istemiyorsa (ör. Google İşletme gönderisi) kullanıcı tanımlı
+  // CTA dışında eylem çağrısı eklenmez.
+  if (profile.ctaStyle === 'NONE') return custom && charLength(custom) < 60 ? custom : null;
 
   if (!hasLink) {
     return custom && charLength(custom) < 60 ? custom : null;
   }
 
-  if (rule && !rule.clickableLinks) {
-    const hint = ['INSTAGRAM', 'TIKTOK', 'THREADS'].includes(String(input.platform))
+  const linkHint = rule && !rule.clickableLinks
+    ? ['INSTAGRAM', 'TIKTOK', 'THREADS'].includes(String(input.platform))
       ? 'Detaylar profildeki bağlantıda.'
-      : 'Detaylar için profilimizi ziyaret edin.';
-    return custom ? `${custom} ${hint}` : hint;
-  }
+      : 'Detaylar için profilimizi ziyaret edin.'
+    : null;
 
-  return custom || `${platformName} üzerinden detaylara ulaşabilirsiniz.`;
+  switch (profile.ctaStyle) {
+    case 'MINIMAL':
+      return custom ?? linkHint ?? 'Detaylar bağlantıda.';
+    case 'CONVERSATIONAL':
+      return custom ?? linkHint ?? 'Siz ne düşünüyorsunuz? Yorumlarda paylaşın.';
+    case 'PROFESSIONAL':
+      return custom ?? linkHint ?? 'Detaylar için gönderiye eklenen bağlantıyı inceleyebilirsiniz.';
+    default:
+      return custom ?? linkHint ?? `${platformName} üzerinden detaylara ulaşabilirsiniz.`;
+  }
 }
 
 function buildTitle(input: AdaptationInput, caption: string, master: string): string | null {

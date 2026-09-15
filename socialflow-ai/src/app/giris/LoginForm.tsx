@@ -9,7 +9,7 @@ import { api, ApiError } from '@/lib/client/api';
 export function LoginForm({ demoUser }: { demoUser: { email: string; password: string; appName: string } }) {
   const router = useRouter();
   const params = useSearchParams();
-  const redirectTo = params.get('yonlendir') || '/anasayfa';
+  const redirectTo = params.get('yonlendir') || '/app/dashboard';
 
   const [email, setEmail] = useState(demoUser.email);
   const [password, setPassword] = useState('');

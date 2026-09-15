@@ -1,3 +1,4 @@
+import { processInboxEvent } from '../inbox/service';
 import { claimNextJob, completeJob, failJob } from './queue';
 import { publishPlatformContent, rollupContentStatus } from '../social/publishingService';
 import prisma from '../prisma';
@@ -16,6 +17,10 @@ export async function processJob(job: any): Promise<Record<string, unknown> | vo
   const payload = safeParse(job.payload);
 
   switch (job.type) {
+    case 'InboxEventJob':
+      if (!job.workspaceId || typeof payload.eventId !== 'string') throw new Error('Geçersiz gelen kutusu işi.');
+      try { return await processInboxEvent(job.workspaceId, payload.eventId); }
+      catch { throw new Error('Gelen kutusu olayı işlenemedi. Kaynak ve hesap yetkilerini kontrol edin.'); }
     case 'PublishContentJob':
       return handlePublishContentJob(job, payload);
     case 'MediaProcessingJob':
@@ -189,7 +194,7 @@ async function handleTokenRefreshJob(_job: any, payload: any) {
         title: 'Hesap bağlantısı yenilenmeli',
         message: `${account.displayName} (${account.handle}) hesabının bağlantısının yenilenmesi gerekiyor.`,
         actionLabel: 'Hesabı Yeniden Bağla',
-        actionRoute: '/sosyal-hesaplar'
+        actionRoute: '/app/hesaplar'
       });
       console.error('[TokenRefreshJob]', account.id, message);
     }

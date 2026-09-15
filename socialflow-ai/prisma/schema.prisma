@@ -14,12 +14,17 @@
 // =============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  // Prisma 7 üretken istemci (Rust'suz): sorgu derleyicisi WASM + sürücü adaptörü.
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
+  // Bağlantı adresi Prisma 7'de burada değil `prisma.config.ts` içinde tutulur
+  // (CLI komutları için) ve uygulama `src/lib/prisma.ts` içindeki sürücü
+  // adaptörüyle bağlanır. PostgreSQL'e geçiş: provider = "postgresql" yapın,
+  // DATABASE_URL'i `postgresql://...` olarak verin; adaptör otomatik seçilir.
   provider = "sqlite" // PG: "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // -----------------------------------------------------------------------------
@@ -30,10 +35,13 @@ model User {
   id           String    @id @default(cuid())
   workspaceId  String
   email        String    @unique
-  passwordHash String // argon2id / bcrypt — asla düz metin
+  passwordHash String // scrypt (bkz. src/lib/crypto.ts) — asla düz metin
   name         String
   avatarUrl    String?
-  role         String    @default("OWNER") // Role
+  role         String    @default("OWNER") // Role — üyelik yoksa geriye dönük varsayılan
+  // Durum: ACTIVE | INVITED | SUSPENDED | DELETED (soft delete/arşiv stratejisi §87)
+  status       String    @default("ACTIVE")
+  emailVerifiedAt DateTime?
   locale       String    @default("tr-TR")
   timezone     String    @default("Europe/Istanbul")
   isActive     Boolean   @default(true)
@@ -42,6 +50,8 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships    WorkspaceMember[]
+  passwordResets PasswordResetToken[]
   createdContent Content[]      @relation("ContentCreator")
   approvals      Content[]      @relation("ContentApprover")
   notifications  Notification[]
@@ -49,6 +59,10 @@ model User {
   sessions       Session[]
 
   @@index([workspaceId])
+  inboxAssignments ConversationAssignment[]
+  ownedLeads Lead[]
+  @@unique([workspaceId, id])
+
 }
 
 // Sunucu taraflı oturumlar. Tarayıcıda yalnızca HttpOnly+SameSite=Lax çerez
@@ -82,6 +96,7 @@ model Workspace {
   updatedAt DateTime @updatedAt
 
   users            User[]
+  members          WorkspaceMember[]
   brands           Brand[]
   socialAccounts   SocialAccount[]
   mediaAssets      MediaAsset[]
@@ -94,11 +109,16 @@ model Workspace {
   notifications    Notification[]
   analytics        AnalyticsSnapshot[]
   auditLogs        AuditLog[]
+  aiGenerations    AiGeneration[]
   jobs             Job[]
   appSettings      AppSettings?
   integrationState ProviderIntegration[]
 
   @@index([slug])
+  adAccounts AdAccount[]
+  products Product[]
+  contacts Contact[]
+
 }
 
 // Uygulama markası (ad, logo, renkler) — Admin Ayarları'ndan düzenlenebilir.
@@ -159,6 +179,13 @@ model Brand {
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
+  conversations SocialConversation[]
+  @@unique([workspaceId, id])
+
+  adAccounts AdAccount[]
+  products Product[]
+  contacts Contact[]
+
 }
 
 // Marka sesi: AI uyarlamasının "ton" girdisi.
@@ -209,6 +236,11 @@ model SocialAccount {
 
   @@unique([workspaceId, platform, handle])
   @@index([workspaceId, platform])
+  conversations SocialConversation[]
+  participants SocialParticipant[]
+  inboxEvents InboxEvent[]
+  @@unique([workspaceId, id])
+
 }
 
 // Token'lar asla tarayıcıya gönderilmez; AES-256-GCM ile şifrelenerek saklanır.
@@ -301,6 +333,7 @@ model MediaAsset {
   folder           MediaFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
   contentLinks     ContentMedia[]
   platformContents PlatformContent[]
+  variants         MediaVariant[]
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, kind])
@@ -327,7 +360,9 @@ model Content {
   timezone         String    @default("Europe/Istanbul")
   scheduleMode     String    @default("NOW") // NOW | SCHEDULE | DRAFT
   scheduledFor     DateTime?
-  status           String    @default("DRAFT") // ContentStatus
+  status           String    @default("DRAFT") // ContentStatus: DRAFT | PROCESSING | READY | ARCHIVED (+ yayın durumları)
+  // İçeriğin kaynağı: MANUAL | AI_ASSISTED | AI_GENERATED | IMPORTED | REPURPOSED
+  origin           String    @default("MANUAL")
   adaptState       String    @default("NONE") // NONE | ADAPTING | ADAPTED | PARTIAL | ERROR
   version          Int       @default(1)
   createdById      String?
@@ -344,6 +379,7 @@ model Content {
   approvedBy       User?               @relation("ContentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   media            ContentMedia[]
   versions         ContentVersion[]
+  aiGenerations    AiGeneration[]
   platformContents PlatformContent[]
   schedules        Schedule[]
   notifications    Notification[]
@@ -418,6 +454,8 @@ model PlatformContent {
 
   charLimit Int @default(2200)
   charUsed  Int @default(0)
+  // Üretimde kullanılan PlatformRule sürümü (kural değişse bile kayıt korunur).
+  platformRuleVersion Int?
 
   status         String    @default("DRAFT") // PublishStatus
   scheduledFor   DateTime?
@@ -556,10 +594,13 @@ model PlatformRule {
   capabilities             String   @default("[]") // PG: Json
   source                   String   @default("BUILTIN") // BUILTIN | SYNCED | MANUAL
   active                   Boolean  @default(true)
+  // Kural sürümü: içerik/PlatformContent hangi sürümle üretildiğini saklar.
+  version                  Int      @default(1)
   lastUpdatedAt            DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions  PlatformRuleVersion[]
 
   @@unique([workspaceId, platform, contentType])
   @@index([workspaceId, platform])
@@ -632,6 +673,8 @@ model Campaign {
   contents  Content[]
   analytics AnalyticsSnapshot[]
 
+  leads Lead[]
+  @@unique([workspaceId, id])
   @@unique([workspaceId, code])
 }
 
@@ -741,6 +784,9 @@ model Job {
 
 // OAuth "state" doğrulaması (CSRF koruması). Kısa ömürlü, tek kullanımlık.
 model OAuthState {
+  socialAccountId String?
+  redirectUri String?
+  accountUpdatedAt DateTime?
   id           String    @id @default(cuid())
   state        String    @unique
   platform     String
@@ -1179,3 +1225,915 @@ model BrandMemory {
   @@index([workspaceId])
   @@index([brandId])
 }
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Çalışma alanı üyeliği (RBAC temeli)
+// -----------------------------------------------------------------------------
+// İş verileri doğrudan kullanıcıya DEĞİL, çalışma alanına bağlıdır. Kullanıcı ile
+// çalışma alanı arasındaki ilişki bu tabloda tutulur; ekipler, acenteler, müşteri
+// hesapları ve ileriki fazlardaki roller (RBAC) bu yapı üzerine kurulur.
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    @default("OWNER") // OWNER | ADMIN | EDITOR | APPROVER | VIEWER | ANALYST
+  status      String    @default("ACTIVE") // ACTIVE | INVITED | SUSPENDED
+  invitedById String?
+  invitedAt   DateTime?
+  joinedAt    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId, role])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Şifre sıfırlama
+// -----------------------------------------------------------------------------
+// Yalnızca token'ın SHA-256 özeti saklanır; ham token e-postayla gönderilir.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Medya varyantı
+// -----------------------------------------------------------------------------
+// Orijinal yükleme ASLA değiştirilmez. Her platform/içerik türü için üretilen
+// kırpılmış/ölçeklenmiş türev burada ayrı bir kayıt olarak tutulur.
+model MediaVariant {
+  id           String   @id @default(cuid())
+  mediaAssetId String
+  workspaceId  String
+  // NULL yerine boş dize: SQLite'ta NULL değerler benzersizlik kısıtında
+  // birbirinden farklı sayılır; tekilleştirme için "" kullanılır.
+  platform     String   @default("") // PlatformCode (genel varyantlar için "")
+  contentType  String   @default("") // ContentType
+  kind         String   @default("CROP") // CROP | SCALE | THUMBNAIL | COVER | VIDEO_POSTER
+  aspectRatio  String   @default("") // "1:1" | "4:5" | "9:16" | "16:9"
+  storageKey   String
+  publicUrl    String?
+  mimeType     String
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  bytes        Int?
+  focalPoint   String? // PG: Json { x, y }
+  cropMode     String   @default("SMART") // SMART | MANUAL | FIT
+  // Yapay zekâ DEĞİL, deterministik/akıllı kırpma bilgisi (şeffaflık için).
+  processingMethod String @default("DETERMINISTIC") // DETERMINISTIC | USER_FOCAL_POINT | AI_SALIENCY (ileride)
+  processingStatus String @default("READY") // PENDING | PROCESSING | READY | FAILED (yüklendi/işleniyor/hazır/başarısız)
+  processingMetadata String @default("{}") // PG: Json — kırpma kutusu, kaynak boyut, hata mesajı
+  checksum     String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaAssetId, platform, contentType, aspectRatio])
+  @@index([mediaAssetId])
+  @@index([workspaceId, platform])
+  @@index([processingStatus])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Yapay zekâ üretim kaydı (denetim + tekrarlanabilirlik)
+// -----------------------------------------------------------------------------
+// Gizli anahtar/token ASLA saklanmaz. Yalnızca sağlayıcı adı, model, istem
+// özeti (hash) ve sonuç meta verisi tutulur.
+model AiGeneration {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contentId   String?
+  brandId     String?
+  userId      String?
+  // ADAPT_CAPTION | GENERATE_CAPTION | HASHTAGS | SPELLCHECK | VARIANT_COPY ...
+  type        String
+  provider    String // deterministic | openai | anthropic
+  model       String?
+  platform    String?
+  contentType String?
+  inputHash   String? // istem (prompt) özeti — kişisel veri saklanmaz
+  status      String   @default("SUCCESS") // SUCCESS | FAILED | SKIPPED
+  errorCode   String?
+  tokensIn    Int?
+  tokensOut   Int?
+  durationMs  Int?
+  metadata    String   @default("{}") // PG: Json — uyarılar, korunan gerçekler, sürüm
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content   Content?  @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([contentId])
+  @@index([type, status])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Platform kural sürümleri
+// -----------------------------------------------------------------------------
+// Kurallar zamanla değişir. Güncelleme sırasında eski tanım SİLİNMEZ; yeni bir
+// sürüm satırı olarak saklanır. Üretilmiş içerikler kullandıkları sürümü
+// (`PlatformContent.platformRuleVersion`) referans alır.
+model PlatformRuleVersion {
+  id            String   @id @default(cuid())
+  platformRuleId String
+  workspaceId   String
+  platform      String
+  contentType   String
+  version       Int
+  label         String
+  // Kuralın tam anlık görüntüsü (PG: Json)
+  snapshot      String   @default("{}")
+  changeNote    String?
+  changedById   String?
+  createdAt     DateTime @default(now())
+
+  rule PlatformRule @relation(fields: [platformRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([platformRuleId, version])
+  @@index([workspaceId, platform, contentType])
+}
+
+// PHASE 5 — additive inbox foundation. No publishing/token tables replaced.
+model SocialParticipant {
+  id                    String @id @default(cuid())
+  workspaceId           String
+  socialAccountId       String
+  providerParticipantId String
+  displayName           String
+  firstSeenAt           DateTime @default(now())
+  lastSeenAt            DateTime @default(now())
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  conversations SocialConversation[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, socialAccountId, providerParticipantId])
+}
+
+model SocialConversation {
+  id                     String @id @default(cuid())
+  workspaceId            String
+  brandId                String
+  socialAccountId        String
+  participantId          String
+  provider               String
+  providerConversationId String
+  source                 String @default("MANUAL")
+  type                   String
+  status                 String @default("NEW")
+  priority               String @default("NORMAL")
+  assignedTo             String?
+  version                Int @default(1)
+  firstMessageAt         DateTime @default(now())
+  lastMessageAt          DateTime @default(now())
+  resolvedAt             DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  participant SocialParticipant @relation(fields: [workspaceId, participantId], references: [workspaceId, id], onDelete: Restrict)
+  messages SocialMessage[]
+  assignments ConversationAssignment[]
+  contactLink ContactConversationLink?
+  tags ConversationTag[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, socialAccountId, providerConversationId])
+  @@index([workspaceId, status, lastMessageAt])
+  @@index([workspaceId, assignedTo])
+}
+
+model SocialMessage {
+  id                String @id @default(cuid())
+  workspaceId       String
+  conversationId    String
+  providerMessageId String
+  direction         String // INBOUND | OUTBOUND | INTERNAL; INTERNAL never transported
+  messageType       String @default("TEXT")
+  sender            String
+  text              String
+  sentAt            DateTime
+  receivedAt        DateTime @default(now())
+  isRead            Boolean @default(false)
+  createdAt         DateTime @default(now())
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([conversationId, providerMessageId])
+  @@index([workspaceId, conversationId, sentAt])
+}
+
+model ConversationAssignment {
+  id             String @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  assignedTo     String?
+  assignedBy     String
+  createdAt      DateTime @default(now())
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  actor User @relation(fields: [workspaceId, assignedBy], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, conversationId, createdAt])
+}
+
+model ConversationTag {
+  id             String @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  name           String
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([conversationId, name])
+  @@index([workspaceId, name])
+}
+
+// Minimal normalized payload only; no raw tokens or unfiltered provider payloads.
+model InboxEvent {
+  id              String @id @default(cuid())
+  workspaceId     String
+  socialAccountId String
+  eventKey        String
+  source          String @default("MANUAL")
+  payload         String
+  payloadHash     String
+  status          String @default("QUEUED")
+  conversationId  String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, eventKey])
+  @@index([workspaceId, status])
+}
+
+
+// PHASE 6 — Paid account isolation. Never reuse/overwrite SocialProviderToken.
+model AdAccount {
+  id                  String @id @default(cuid())
+  workspaceId         String
+  brandId             String?
+  provider            String
+  providerAccountId   String
+  displayName         String
+  currency            String?
+  timezone            String?
+  providerTimezone    String?
+  connectionStatus    String @default("UNVERIFIED")
+  grantedScopes       String @default("[]")
+  version             Int @default(1)
+  lastValidatedAt     DateTime?
+  lastAccountSyncAt   DateTime?
+  lastCampaignSyncAt  DateTime?
+  lastMetricsSyncAt   DateTime?
+  lastConversionSyncAt DateTime?
+  lastCatalogSyncAt   DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand? @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  credential AdAccountCredential?
+  capabilitySnapshots AdProviderCapability[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider, connectionStatus])
+}
+
+// Tokens are encrypted with existing crypto helpers by a future verified OAuth flow only.
+model AdAccountCredential {
+  id              String @id @default(cuid())
+  workspaceId     String
+  adAccountId     String @unique
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  lastRotatedAt   DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, adAccountId])
+}
+
+// Append-only capability evidence; no mutation/public import endpoint in this stage.
+model AdProviderCapability {
+  id           String @id @default(cuid())
+  workspaceId  String
+  adAccountId  String
+  version      Int
+  apiVersion   String?
+  capabilities String @default("{}")
+  source       String @default("UNVERIFIED")
+  verifiedAt   DateTime?
+  createdAt    DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([adAccountId, version])
+  @@index([workspaceId, adAccountId, createdAt])
+}
+
+// Central product truth. No provider catalog or second commerce product model.
+// --- Ürün Kataloğu (§100-§105) — 3eb kiracı izolasyonu + 0d6 AI katalog alanları birleşimi ---
+model Product {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  name        String
+  sku         String?
+  category    String?
+  description String   @default("")
+  url         String?
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  variants  ProductVariant[]
+  media     ProductMedia[]
+  facts     ProductFact[]
+  claims    ProductClaim[]
+  offers    CampaignOffer[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId, brandId, status])
+  @@index([brandId])
+}
+
+model ProductVariant {
+  id String @id @default(cuid())
+  workspaceId String
+  productId String
+  sku String
+  name String
+  // Integer minor units; null means unknown, not free. Currency scale is stored.
+  priceMinor Int?
+  currency String
+  currencyScale Int
+  stock Int?
+  version Int @default(1)
+  source String @default("USER_PROVIDED")
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [workspaceId, productId], references: [workspaceId, id], onDelete: Restrict)
+  inventory InventoryMovement[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId, productId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  workspaceId String
+  variantId String
+  fromStock Int?
+  toStock Int
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  variant ProductVariant @relation(fields: [workspaceId, variantId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, variantId, createdAt])
+}
+
+model Contact {
+  id String @id @default(cuid())
+  workspaceId String
+  brandId String
+  name String
+  email String?
+  phone String?
+  source String @default("USER_PROVIDED")
+  status String @default("ACTIVE")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  leads Lead[]
+  conversations ContactConversationLink[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, brandId, status])
+}
+model Lead {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  campaignId String?
+  ownerId String?
+  title String
+  stage String @default("NEW")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  campaign Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Restrict)
+  owner User? @relation(fields: [workspaceId, ownerId], references: [workspaceId, id], onDelete: Restrict)
+  activities LeadActivity[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, stage, updatedAt])
+}
+model LeadActivity {
+  id String @id @default(cuid())
+  workspaceId String
+  leadId String
+  actorId String
+  type String
+  text String
+  createdAt DateTime @default(now())
+  lead Lead @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, leadId, createdAt])
+}
+model ContactConversationLink {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  conversationId String @unique
+  actorId String
+  createdAt DateTime @default(now())
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, conversationId])
+  @@index([workspaceId, contactId])
+}
+
+
+// =============================================================================
+//  PHASE 4 — EXTENDED MODELS (§136): Product, Creative, AI, Automation, Trends
+// =============================================================================
+
+// --- Ürün Kataloğu (§100-§105) ---
+
+model ProductMedia {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String
+  kind        String @default("IMAGE") // IMAGE | VIDEO
+  storageKey  String?
+  fileUrl     String?
+  mediaAssetId String?
+  width       Int?
+  height      Int?
+  bytesKb     Int?
+  isPrimary   Boolean @default(false)
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([workspaceId])
+}
+
+model ProductFact {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String
+  key         String // PRICE | FEATURE | USAGE | SPEC ...
+  value       String
+  status      String @default("VERIFIED") // VERIFIED | UNVERIFIED | EXPIRED (§102)
+  source      String?
+  sourceId    String?
+  verifiedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model ProductClaim {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String?
+  type        String @default("REQUIRED_DISCLAIMER") // REQUIRED_DISCLAIMER | FORBIDDEN_PHRASE | REQUIRED_PHRASE | REGULATED_CLAIM (§105)
+  phrase      String
+  required    Boolean @default(false)
+  blocked     Boolean @default(false)
+  approvalStatus String @default("APPROVED")
+  createdAt   DateTime @default(now())
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+}
+
+model CampaignOffer {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String?
+  campaignId  String?
+  name        String?
+  price       Float?   // TRY
+  currency    String   @default("TRY")
+  discount    Float?   // %
+  coupon      String?
+  startDate   DateTime?
+  endDate     DateTime?
+  conditions  String?  // JSON or text
+  status      String   @default("VERIFIED") // VERIFIED | UNVERIFIED | EXPIRED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+  @@index([campaignId])
+}
+
+// --- AI / Kreatif (§56-§69, §107-§116) ---
+
+model PromptTemplate {
+  id           String   @id @default(cuid())
+  workspaceId  String?
+  name         String
+  service      String   // e.g. captionGeneration, imageGeneration, creativeResize
+  version      String   @default("1.0")
+  systemPrompt String
+  template     String   // handlebars-like
+  outputSchema String   @default("{}") // JSON schema
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([service, isActive])
+}
+
+model AiUsage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  brandId     String?
+  provider    String   // deterministic | openai | anthropic
+  service     String   // textGeneration | imageGeneration | imageEditing | videoProcessing | transcription | embeddings
+  task        String?  // detail
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  imageCount  Int      @default(0)
+  durationMs  Int      @default(0)
+  costUSD     Float    @default(0)
+  meta        String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([service])
+}
+
+model AiFeedback {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  brandId     String?
+  contentId   String?
+  service     String   // e.g. imageGeneration, captionGeneration
+  outputId    String?  // reference to generated artifact
+  rating      String   // LIKED | DISLIKED | BRAND_ALIGNED | BRAND_MISALIGNED
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, brandId])
+}
+
+model AiImageGeneration {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  userId      String?
+  prompt      String
+  negativePrompt String?
+  style       String?
+  aspectRatio String?  // 1:1 | 4:5 | 9:16 | 16:9
+  brandKitUsed Boolean @default(false)
+  productId   String?
+  status      String   @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED (Turkish: Kuyrukta etc. but stored English)
+  resultUrl   String?
+  resultKey   String?
+  error       String?
+  provider    String?
+  costUSD     Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, brandId])
+  @@index([status])
+}
+
+model MasterCreative {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  title       String?
+  storageKey  String   // master file
+  fileUrl     String?
+  width       Int?
+  height      Int?
+  aspectRatio String?
+  layers      String   @default("{}") // JSON design state
+  brandKitVersion Int?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  variants CreativeVariant[]
+  quality  CreativeQualityScore?
+
+  @@index([workspaceId, brandId])
+}
+
+model CreativeVariant {
+  id               String @id @default(cuid())
+  workspaceId      String
+  brandId          String
+  masterCreativeId String
+  platform         String // INSTAGRAM | FACEBOOK | ...
+  contentType      String // FEED | STORY | REEL ...
+  aspectRatio      String
+  width            Int?
+  height           Int?
+  storageKey       String?
+  fileUrl          String?
+  layers           String  @default("{}") // recomposed layers
+  status           String  @default("READY")
+  createdAt        DateTime @default(now())
+
+  master MasterCreative @relation(fields: [masterCreativeId], references: [id], onDelete: Cascade)
+
+  @@index([masterCreativeId])
+  @@index([workspaceId])
+}
+
+model CreativeQualityScore {
+  id               String @id @default(cuid())
+  workspaceId      String
+  brandId          String?
+  masterCreativeId String @unique
+  resolution       Int    @default(0) // 0-100
+  readability      Int    @default(0)
+  contrast         Int    @default(0)
+  composition      Int    @default(0)
+  brandConsistency Int    @default(0)
+  platformFit      Int    @default(0)
+  overall          Int    @default(0) // advisory
+  details          String @default("{}") // JSON breakdown
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  master MasterCreative @relation(fields: [masterCreativeId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// --- Otomasyon (§117-§124) ---
+model AutomationRule {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  trigger     String   // ContentCreated | ContentApproved | ...
+  conditions  String   @default("[]") // JSON array
+  actions     String   @default("[]") // JSON array
+  enabled     Boolean  @default(false) // disabled by default (§122)
+  autonomyLevel Int    @default(1) // 1-4
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  executions AutomationExecution[]
+
+  @@index([workspaceId, enabled])
+}
+
+model AutomationExecution {
+  id          String    @id @default(cuid())
+  workspaceId String
+  ruleId      String
+  trigger     String
+  triggerId   String?   // id of triggering entity
+  status      String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | SKIPPED
+  input       String    @default("{}") // JSON
+  output      String?   // JSON
+  error       String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([workspaceId, status])
+}
+
+// --- İçerik Planlama / Deneyler / Performans (§70-§93) ---
+model ContentPlan {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  campaignId  String?
+  title       String
+  dateFrom    DateTime
+  dateTo      DateTime
+  goal        String?
+  frequency   String? // e.g. 3x/week
+  platforms   String   @default("[]") // JSON
+  status      String   @default("DRAFT") // DRAFT | APPLIED | ARCHIVED
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ContentPlanItem[]
+
+  @@index([workspaceId, brandId])
+}
+
+model ContentPlanItem {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  brandId       String
+  planId        String
+  date          DateTime
+  platform      String
+  contentType   String?
+  topic         String?
+  headline      String?
+  captionConcept String?
+  creativeConcept String?
+  cta           String?
+  hashtags      String    @default("[]") // JSON
+  status        String    @default("PLANNED") // PLANNED | CREATED | PUBLISHED
+  contentId     String?
+  createdAt     DateTime  @default(now())
+
+  plan ContentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, date])
+  @@index([workspaceId])
+}
+
+model ContentExperiment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  name        String
+  hypothesis  String?
+  variantA    String    // JSON
+  variantB    String    // JSON
+  metric      String    @default("ENGAGEMENT") // ENGAGEMENT | REACH | ...
+  goal        String?
+  startAt     DateTime?
+  endAt       DateTime?
+  status      String    @default("DRAFT") // DRAFT | RUNNING | DONE | CANCELLED
+  winner      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+model PerformancePrediction {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  contentId   String?
+  platform    String
+  format      String?
+  publishAt   DateTime?
+  inputs      String   @default("{}") // JSON inputs §91
+  score       Float?   // 0-1 confidence
+  label       String?  // "yüksek potansiyel"
+  reason      String?
+  confidence  String?  // LOW | MEDIUM | HIGH
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, platform])
+}
+
+// --- Trend & Rakip (§94-§99) ---
+model TrendItem {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  brandId     String?
+  source      String   @default("DEMO") // DEMO | API | LICENSED
+  title       String
+  description String?
+  platform    String?
+  category    String?
+  relevance   Float    @default(0) // 0-1
+  freshness   Float    @default(0)
+  opportunity String?
+  data        String   @default("{}") // JSON raw
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([source])
+}
+
+model CompetitorProfile {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?  // which brand this competitor is compared to
+  name        String
+  handle      String?
+  platform    String?
+  website     String?
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contents CompetitorContent[]
+  insights CompetitorInsight[]
+
+  @@index([workspaceId])
+}
+
+model CompetitorContent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  competitorId String
+  platform    String?
+  externalId  String?
+  caption     String?
+  mediaUrl    String?
+  publishedAt DateTime?
+  metrics     String   @default("{}") // JSON likes/comments
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  competitor CompetitorProfile @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+}
+
+model CompetitorInsight {
+  id          String   @id @default(cuid())
+  workspaceId String
+  competitorId String
+  type        String   // GAP | STRENGTH | OPPORTUNITY
+  title       String
+  description String?
+  data        String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  competitor CompetitorProfile @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+}
+
+// --- Semantik Arama / Embeddings (§128-§131) ---
+model Embedding {
+  id          String   @id @default(cuid())
+  workspaceId String
+  entityType  String   // CONTENT | MEDIA | PRODUCT | CAMPAIGN
+  entityId    String
+  text        String?  // source text
+  vector      String   // JSON array (SQLite) — PG: vector type
+  model       String   @default("demo")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, entityType, entityId])
+  @@index([workspaceId, entityType])
+}
+
+// --- Campaign relation extension for Product ---
+// Note: Brand relation added via Product; CampaignOffer already links to campaignId
+model AnalyticsAnomaly {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  platform    String?
+  metric      String
+  date        DateTime
+  expected    Float?
+  actual      Float?
+  deviation   Float?
+  severity    String   @default("INFO")
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, date])
+}
+
+// Workspace settings extensions (if not already via AppSettings)
+// Feature flags are env + AppSettings; no extra model needed.
+
+// Add missing relation fields (prisma requires opposite side if relation defined)
+// These are additive and do not break existing data.
+

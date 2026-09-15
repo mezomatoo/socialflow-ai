@@ -5,23 +5,38 @@
   "description": "SocialFlow AI — merkezi sosyal medya içerik üretimi, uyarlama, planlama ve yayınlama platformu",
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0",
-    "build": "prisma generate && next build",
+    "build": "npm run db:generate && next build",
     "start": "next start -p 3000 -H 0.0.0.0",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "db:push": "prisma db push",
+    "typecheck": "npm run db:generate && tsc --noEmit",
+    "db:generate": "node scripts/prisma-cli.mjs generate",
+    "db:push": "node scripts/db-push.mjs",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
-    "test:setup": "DATABASE_URL=\"file:./test.db\" prisma db push --force-reset --skip-generate && DATABASE_URL=\"file:./test.db\" tsx prisma/seed.ts",
-    "test": "DATABASE_URL=\"file:./test.db\" tsx --test tests/critical-path.test.ts tests/partial-failure.test.ts tests/brandkit.test.ts"
+    "db:studio": "node scripts/prisma-cli.mjs studio",
+    "prisma": "node scripts/prisma-cli.mjs",
+    "test:setup": "node scripts/test-setup.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "worker": "tsx scripts/worker.ts",
+    "test:core": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/critical-path.test.ts tests/partial-failure.test.ts tests/brandkit.test.ts",
+    "test:inbox": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/inbox.test.ts",
+    "test:oauth": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/oauth-state.test.ts",
+    "test:instagram": "DATABASE_URL=\"file:./prisma/test.db\" DEMO_MODE=false APP_URL=https://oauth-test.invalid INSTAGRAM_APP_ID=test-only INSTAGRAM_APP_SECRET=test-only tsx --test tests/instagram-connection.test.ts",
+    "test:accounts": "DATABASE_URL=\"file:./prisma/test.db\" DEMO_MODE=false tsx --test tests/account-registration.test.ts",
+    "test:advertising:contracts": "tsx --test tests/advertising-contracts.test.ts",
+    "test:advertising": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/advertising-contracts.test.ts tests/advertising-service.test.ts",
+    "test:removed-modules": "tsx --test tests/removed-modules.test.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "next": "^14.2.35",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@libsql/client": "^0.15.15",
+    "@prisma/adapter-libsql": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.6",
@@ -31,9 +46,13 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.47",
-    "prisma": "^5.22.0",
+    "prisma": "^7.10.0",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "@prisma/driver-adapter-utils": "^7.10.0",
+    "@prisma/migrate": "^7.10.0",
+    "@prisma/schema-engine-wasm": "7.10.0-4.0edf323efd1d98336f3f0a68684b56f689b900d3",
+    "@types/pg": "^8.11.10"
   }
 }

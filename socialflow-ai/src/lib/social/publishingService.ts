@@ -148,7 +148,7 @@ export async function publishPlatformContent(
         ok: false,
         status: 'FAILED',
         message: friendly,
-        action: { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' },
+        action: { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' },
         retryable: false,
         demoMode: false
       };
@@ -160,7 +160,7 @@ export async function publishPlatformContent(
       await markFailed(publication.id, platformContentId, pc.contentId, friendly, null, ctx);
       return {
         platformContentId, platform, contentType, label, ok: false, status: 'FAILED',
-        message: friendly, action: { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' },
+        message: friendly, action: { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' },
         retryable: false, demoMode: false
       };
     }

@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 
 /**
  * PHASE 4 — Brand Kit paylaşılan tipleri

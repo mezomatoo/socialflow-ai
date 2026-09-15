@@ -210,7 +210,7 @@ export class FacebookProvider extends OAuth2Provider {
       ok: false,
       demoMode: payload.demoMode,
       friendlyMessage: 'Facebook sayfa kimliği bulunamadı. Hesabı yeniden bağlayın.',
-      action: { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' },
+      action: { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' },
       retryable: false
     };
   }
