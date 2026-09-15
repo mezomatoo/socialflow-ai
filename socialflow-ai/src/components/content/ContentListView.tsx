@@ -118,6 +118,34 @@ export function ContentListView({
     }
   }
 
+  /** Faz 2 §59: Planlananlar satırından hızlı "Şimdi Yayınla". */
+  async function publishNow(c: ContentListItem) {
+    if (!window.confirm(`"${c.title}" şimdi yayınlandıktan sonra planlama iptal edilir. Onaylıyor musunuz?`)) return;
+    setBusyId(c.id);
+    try {
+      const res = await api.post<{ ready: number; total: number }>(`/api/contents/${c.id}/publish`, {});
+      toast.success('Yayın tamamlandı', `${res.ready}/${res.total} hedef başarılı. Detaylar için içeriği açın.`);
+      if (typeof window !== 'undefined') window.location.reload();
+    } catch (e) {
+      toast.error('Yayımlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+      setBusyId(null);
+    }
+  }
+
+  /** Faz 2 §59: Planlamayı İptal Et — kuyruk işi iptal edilir, içerik taslağa döner. */
+  async function cancelSchedule(c: ContentListItem) {
+    if (!window.confirm(`"${c.title}" için planlama iptal edilsin mi? İçerik taslak olarak korunur.`)) return;
+    setBusyId(c.id);
+    try {
+      await api.post(`/api/contents/${c.id}/schedule`, { cancel: true });
+      toast.success('Planlama iptal edildi', 'İçerik taslak olarak korundu.');
+      if (typeof window !== 'undefined') window.location.reload();
+    } catch (e) {
+      toast.error('İptal edilemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+      setBusyId(null);
+    }
+  }
+
   async function remove(c: ContentListItem) {
     if (!window.confirm(`"${c.title ?? 'İçerik'}" silinsin mi? Bu işlem geri alınamaz.`)) return;
     setBusyId(c.id);
@@ -277,6 +305,26 @@ export function ContentListView({
                         {platforms.length > 8 && <span className="hint">+{platforms.length - 8}</span>}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        {dateMode === 'scheduled' && (
+                          <>
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="Şimdi Yayınla"
+                              disabled={busyId === c.id}
+                              onClick={() => publishNow(c)}
+                            >
+                              <Icon name="send" size={14} />
+                            </button>
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="Planlamayı İptal Et"
+                              disabled={busyId === c.id}
+                              onClick={() => cancelSchedule(c)}
+                            >
+                              <Icon name="x" size={14} />
+                            </button>
+                          </>
+                        )}
                         <button
                           className="btn-ghost btn-sm"
                           title="Kopyala"
