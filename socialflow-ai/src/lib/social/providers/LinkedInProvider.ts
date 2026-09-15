@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PostStatusResult, PublishPayload, PublishResult } from '../types';
@@ -20,8 +19,8 @@ export class LinkedInProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://www.linkedin.com/oauth/v2/authorization',
       tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
-      clientId: env.providers.LINKEDIN.id,
-      clientSecret: env.providers.LINKEDIN.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['openid', 'profile', 'email', 'w_member_social', 'w_organization_social', 'rw_organization_admin'],
       scopeSeparator: ' ',
       extraAuthParams: { prompt: 'consent' }

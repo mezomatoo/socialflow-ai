@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -20,8 +19,8 @@ export class TikTokProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://www.tiktok.com/v2/auth/authorize/',
       tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
-      clientId: env.providers.TIKTOK.id,
-      clientSecret: env.providers.TIKTOK.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['user.info.basic', 'video.publish', 'video.upload'],
       scopeSeparator: ' ',
       pkce: true,
@@ -104,7 +103,7 @@ export class TikTokProvider extends OAuth2Provider {
       // Faz 2: TikTok yüklemeyi kabul eder ama yayın asenkron işlenir (§51).
       processing: !payload.demoMode,
       friendlyMessage: payload.demoMode
-        ? 'Demo Modu — TikTok için gerçek video yüklemesi yapılmadı.'
+        ? 'Simülasyon — TikTok için gerçek video yüklemesi yapılmadı (API kimlik bilgisi tanımlı değil).'
         : 'TikTok videosu işleniyor. Yükleme durumu birkaç dakika içinde güncellenir.'
     };
   }

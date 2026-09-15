@@ -79,7 +79,7 @@ export const POST = apiRoute(
           name: workspaceName,
           slug,
           plan: 'FREE',
-          demoMode: true,
+          demoMode: false,
           appSettings: { create: {} }
         }
       });

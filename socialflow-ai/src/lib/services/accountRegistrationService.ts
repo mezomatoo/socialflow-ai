@@ -1,5 +1,4 @@
 import prisma from '../prisma';
-import { env } from '../env';
 import { hasRole, type SessionContext } from '../auth/session';
 import { PLATFORMS, type PlatformCode } from '../platforms/platforms';
 export class AccountRegistrationError extends Error {
@@ -25,7 +24,7 @@ export async function registerAccount(session: SessionContext, input: Record<str
   const brandId = text(input.brandId, 100, false) || null;
   const accountType = input.accountType == null ? 'PROFILE' : text(input.accountType, 30);
   if (!['PROFILE', 'PAGE', 'BUSINESS', 'CREATOR', 'CHANNEL', 'GROUP'].includes(accountType)) throw new AccountRegistrationError('Geçersiz hesap türü.');
-  const demoAccount = user.workspace.demoMode || env.demoMode;
+  const demoAccount = user.workspace.demoMode;
   return prisma.$transaction(async tx => {
     if (brandId && !await tx.brand.findFirst({ where: { id: brandId, workspaceId: user.workspaceId } })) throw new AccountRegistrationError('Marka bulunamadı.', 404);
     const existing = await tx.socialAccount.findFirst({ where: { workspaceId: user.workspaceId, platform, handle } });

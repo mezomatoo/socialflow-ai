@@ -3,6 +3,8 @@ import { PLATFORMS } from '../platforms/platforms';
 import { env } from '../env';
 import type { SocialProvider } from './types';
 import { DemoProvider } from './providers/DemoProvider';
+import { resolveProviderCredentialsNow } from './workspaceCredentials';
+import { currentAiWorkspaceId } from '../ai/workspaceContext';
 import { InstagramProvider } from './providers/InstagramProvider';
 import { FacebookProvider } from './providers/FacebookProvider';
 import { XProvider } from './providers/XProvider';
@@ -41,8 +43,16 @@ const factories: Record<PlatformCode, Factory> = {
 const instances = new Map<string, SocialProvider>();
 
 /**
+ * Platform için API kimlik bilgisi var mı? (istek bağlamı farkındı:
+ * önce çalışma alanının panodan girdiği kimlik, sonra ortam değişkenleri)
+ */
+function platformConfigured(code: PlatformCode): boolean {
+  return Boolean(resolveProviderCredentialsNow(currentAiWorkspaceId(), code));
+}
+
+/**
  * Platform adaptörünü döndürür.
- * - DEMO_MODE=true veya API kimlik bilgileri yoksa DemoProvider döner.
+ * - API kimlik bilgileri yoksa DemoProvider döner (yayın simülasyonu).
  * - DemoProvider ASLA yayınlanmış gibi davranmaz.
  */
 export function getProvider(platform: PlatformCode | string, options: { forceReal?: boolean } = {}): SocialProvider {
@@ -51,8 +61,8 @@ export function getProvider(platform: PlatformCode | string, options: { forceRea
     throw new Error(`Bilinmeyen platform: ${platform}`);
   }
 
-  const configured = Boolean(env.providers[code]?.id && env.providers[code]?.secret);
-  const useDemo = !options.forceReal && (env.demoMode || !configured);
+  const configured = platformConfigured(code);
+  const useDemo = !options.forceReal && !configured;
 
   const key = `${code}:${useDemo ? 'demo' : 'real'}`;
   const cached = instances.get(key);
@@ -65,8 +75,7 @@ export function getProvider(platform: PlatformCode | string, options: { forceRea
 
 export function isDemoProvider(platform: PlatformCode | string): boolean {
   const code = platform as PlatformCode;
-  const configured = Boolean(env.providers[code]?.id && env.providers[code]?.secret);
-  return env.demoMode || !configured;
+  return !platformConfigured(code);
 }
 
 export function allProviders(forceReal = false): SocialProvider[] {

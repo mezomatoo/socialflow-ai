@@ -113,6 +113,7 @@ model Workspace {
   jobs             Job[]
   appSettings      AppSettings?
   integrationState ProviderIntegration[]
+  providerCredentials ProviderCredential[]
 
   @@index([slug])
   adAccounts AdAccount[]
@@ -138,6 +139,11 @@ model AppSettings {
   demoBanner      Boolean  @default(true)
   aiProvider      String   @default("deterministic")
   aiModel         String?
+  // Çalışma alanının kendi AI anahtarı (AES-256-GCM ile şifreli; §71).
+  // Boşsa sunucu ortam değişkenlerine, o da yoksa yerel motora düşülür.
+  aiApiKeyEnc     String?
+  // OpenAI uyumlu özel taban URL (kurumsal ağ geçitleri için). Boşsa varsayılan.
+  aiBaseUrl       String?
   aiTemperature   Float    @default(0.7)
   updatedAt       DateTime @updatedAt
 
@@ -277,6 +283,26 @@ model ProviderIntegration {
   lastCheckedAt  DateTime?
   message        String? // Türkçe açıklama
   updatedAt      DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform])
+}
+
+// -----------------------------------------------------------------------------
+// Sağlayıcı API kimlik bilgileri (BYOK — §71)
+// -----------------------------------------------------------------------------
+// Çalışma alanı, her sosyal platform için kendi OAuth uygulama kimliklerini
+// (client id + secret) panodan girer. Secret AES-256-GCM ile şifrelenir ve
+// istemciye asla düz metin dönmez. Ortam değişkenlerindeki kimlikler geri
+// düşüm (fallback) olarak çalışmaya devam eder.
+model ProviderCredential {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  platform        String // PlatformCode
+  clientId        String
+  clientSecretEnc String // AES-256-GCM şifreli
+  updatedAt       DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

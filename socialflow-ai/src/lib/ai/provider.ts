@@ -20,8 +20,10 @@
 import { env } from '../env';
 import { AppError } from '../errors';
 import { logger } from '../observability';
+import { currentAiWorkspaceId } from './workspaceContext';
+import { getWorkspaceAiConfig, getCachedWorkspaceAiConfig } from './workspaceConfig';
 
-export type AiProviderName = 'deterministic' | 'openai' | 'anthropic';
+export type AiProviderName = 'deterministic' | 'openai' | 'anthropic' | 'gemini';
 
 /** Phase 2+ için ayrılmış yetenekler — şimdilik yalnızca bildirilir. */
 export type AiCapability =
@@ -150,8 +152,13 @@ export const deterministicAdapter: AiProviderAdapter = {
 /* OpenAI                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function openAiAdapter(): AiProviderAdapter {
-  const model = env.ai.openaiModel;
+/**
+ * OpenAI Chat Completions adaptörü. Gemini'nin OpenAI uyumlu uç noktası da
+ * aynı adaptörle çağrılır (yalnızca ad/taban URL/model değişir).
+ */
+function openAiAdapter(cfg: { name: 'openai' | 'gemini'; key: string; model: string; baseUrl: string }): AiProviderAdapter {
+  const model = cfg.model;
+  const name = cfg.name;
   const call = async (req: AiGenerationRequest, jsonMode: boolean) => {
     const body: Record<string, unknown> = {
       model,
@@ -166,11 +173,11 @@ function openAiAdapter(): AiProviderAdapter {
 
     return withTimeout(
       async (signal) => {
-        const res = await fetch(`${env.ai.openaiBaseUrl}/chat/completions`, {
+        const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${env.ai.openaiKey}`
+            Authorization: `Bearer ${cfg.key}`
           },
           body: JSON.stringify(body),
           signal
@@ -185,21 +192,21 @@ function openAiAdapter(): AiProviderAdapter {
         return json.choices?.[0]?.message?.content ?? '';
       },
       req.timeoutMs ?? env.ai.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      'openai'
+      name
     );
   };
 
   return {
-    name: 'openai',
-    isAvailable: () => Boolean(env.ai.openaiKey),
+    name,
+    isAvailable: () => Boolean(cfg.key),
     capabilities: () => ['textGeneration', 'structuredGeneration'],
     async textGeneration(req: AiGenerationRequest) {
       const started = Date.now();
       try {
         const text = await call(req, false);
-        return { text, data: null, provider: 'openai', model, degraded: false, failed: false, durationMs: Date.now() - started };
+        return { text, data: null, provider: name, model, degraded: false, failed: false, durationMs: Date.now() - started };
       } catch (error) {
-        return failure(error, 'openai', model, started);
+        return failure(error, name, model, started);
       }
     },
     async structuredGeneration<T>(req: AiGenerationRequest, validate: (raw: unknown) => T | null) {
@@ -211,7 +218,7 @@ function openAiAdapter(): AiProviderAdapter {
         return {
           text,
           data,
-          provider: 'openai',
+          provider: name,
           model,
           degraded: data === null,
           failed: data === null,
@@ -219,7 +226,7 @@ function openAiAdapter(): AiProviderAdapter {
           durationMs: Date.now() - started
         };
       } catch (error) {
-        return failure(error, 'openai', model, started);
+        return failure(error, name, model, started);
       }
     }
   };
@@ -229,16 +236,16 @@ function openAiAdapter(): AiProviderAdapter {
 /* Anthropic                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function anthropicAdapter(): AiProviderAdapter {
-  const model = env.ai.anthropicModel;
+function anthropicAdapter(cfg: { key: string; model: string; baseUrl: string }): AiProviderAdapter {
+  const model = cfg.model;
   const call = async (req: AiGenerationRequest) => {
     return withTimeout(
       async (signal) => {
-        const res = await fetch(`${env.ai.anthropicBaseUrl}/messages`, {
+        const res = await fetch(`${cfg.baseUrl}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': env.ai.anthropicKey,
+            'x-api-key': cfg.key,
             'anthropic-version': '2023-06-01'
           },
           body: JSON.stringify({
@@ -266,7 +273,7 @@ function anthropicAdapter(): AiProviderAdapter {
 
   return {
     name: 'anthropic',
-    isAvailable: () => Boolean(env.ai.anthropicKey),
+    isAvailable: () => Boolean(cfg.key),
     capabilities: () => ['textGeneration', 'structuredGeneration'],
     async textGeneration(req: AiGenerationRequest) {
       const started = Date.now();
@@ -301,7 +308,10 @@ function anthropicAdapter(): AiProviderAdapter {
 }
 
 function failure(error: unknown, provider: AiProviderName, model: string | null, startedAt: number): AiGenerationResult<never> {
-  const message = error instanceof Error ? error.message : 'AI çağrısı başarısız.';
+  const raw = error instanceof Error ? error.message : 'AI çağrısı başarısız.';
+  const message = /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|network socket/i.test(raw)
+    ? 'AI sağlayıcısına ulaşılamadı (ağ hatası). İnternet bağlantısını veya taban URL ayarını kontrol edin.'
+    : raw;
   logger.warn({ event: 'ai.provider_error', provider, model, errorMessage: message });
   return {
     text: '',
@@ -319,45 +329,146 @@ function failure(error: unknown, provider: AiProviderName, model: string | null,
 /* Kayıt (registry)                                                           */
 /* -------------------------------------------------------------------------- */
 
-const ADAPTERS: Record<AiProviderName, () => AiProviderAdapter> = {
-  deterministic: () => deterministicAdapter,
-  openai: openAiAdapter,
-  anthropic: anthropicAdapter
-};
-
-/** Yapılandırmaya göre etkin sağlayıcı (anahtar yoksa yerel motora düşer). */
-export function activeProviderName(): AiProviderName {
-  const configured = env.ai.provider;
-  const adapter = ADAPTERS[configured]?.();
-  if (configured !== 'deterministic' && adapter && adapter.isAvailable()) return configured;
-  return 'deterministic';
+/** Ortam değişkenlerinden yapılandırma (geriye uyumluluk + bağlamsız çağrılar). */
+function envAdapterConfig(): { provider: AiProviderName; key: string | null; model: string; baseUrl: string } {
+  const configured = (env.ai.provider as AiProviderName) || 'deterministic';
+  switch (configured) {
+    case 'openai':
+      return { provider: 'openai', key: env.ai.openaiKey || null, model: env.ai.openaiModel, baseUrl: env.ai.openaiBaseUrl };
+    case 'anthropic':
+      return { provider: 'anthropic', key: env.ai.anthropicKey || null, model: env.ai.anthropicModel, baseUrl: env.ai.anthropicBaseUrl };
+    default:
+      return { provider: 'deterministic', key: null, model: '', baseUrl: '' };
+  }
 }
 
-/** Etkin adaptör. */
+/** Verilen yapılandırmadan adaptör üretir; anahtar yoksa yerel motora düşer. */
+export function buildAdapterFromConfig(cfg: {
+  provider: AiProviderName;
+  key: string | null;
+  model: string | null;
+  baseUrl: string | null;
+}): AiProviderAdapter {
+  if (cfg.provider === 'deterministic') return deterministicAdapter;
+  if (!cfg.key) return deterministicAdapter;
+
+  switch (cfg.provider) {
+    case 'openai':
+      return openAiAdapter({
+        name: 'openai',
+        key: cfg.key,
+        model: cfg.model || 'gpt-4o-mini',
+        baseUrl: (cfg.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+      });
+    case 'gemini':
+      return openAiAdapter({
+        name: 'gemini',
+        key: cfg.key,
+        model: cfg.model || 'gemini-2.0-flash',
+        baseUrl: (cfg.baseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai').replace(/\/+$/, '')
+      });
+    case 'anthropic':
+      return anthropicAdapter({
+        key: cfg.key,
+        model: cfg.model || 'claude-3-5-sonnet-latest',
+        baseUrl: (cfg.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '')
+      });
+    default:
+      return deterministicAdapter;
+  }
+}
+
+function envAdapter(): AiProviderAdapter {
+  const cfg = envAdapterConfig();
+  return buildAdapterFromConfig(cfg);
+}
+
+/**
+ * Etkin adaptör — çalışma alanı farkındı.
+ * API istek bağlamında (apiRoute → AsyncLocalStorage) çalışma alanının panoda
+ * kaydettiği sağlayıcı/anahtar kullanılır; bağlam dışında ortam değişkenleri.
+ * Eşzamanlı sürüm önbelleğe bakar (önbellek boşsa ortam yapılandırması döner);
+ * asenkron sürüm `resolveAiAdapter` her zaman güncel değeri çözer.
+ */
 export function getAiAdapter(): AiProviderAdapter {
-  return ADAPTERS[activeProviderName()]();
+  const wsId = currentAiWorkspaceId();
+  if (wsId) {
+    const cached = getCachedWorkspaceAiConfig(wsId);
+    if (cached) {
+      return buildAdapterFromConfig({
+        provider: cached.provider,
+        key: cached.key,
+        model: cached.model,
+        baseUrl: cached.baseUrl
+      });
+    }
+  }
+  return envAdapter();
+}
+
+/** İstek bağlamına göre adaptörü veritabanından çözerek getirir. */
+export async function resolveAiAdapter(): Promise<AiProviderAdapter> {
+  const wsId = currentAiWorkspaceId();
+  if (wsId) {
+    const cfg = await getWorkspaceAiConfig(wsId);
+    return buildAdapterFromConfig({ provider: cfg.provider, key: cfg.key, model: cfg.model, baseUrl: cfg.baseUrl });
+  }
+  return envAdapter();
+}
+
+/** Yapılandırmaya göre etkin sağlayıcı adı (anahtar yoksa yerel motora düşer). */
+export function activeProviderName(): AiProviderName {
+  return getAiAdapter().name;
+}
+
+/** Çalışma alanı bağlamında etkin sağlayıcı adı (asenkron, güncel çözüm). */
+export async function resolveProviderName(): Promise<AiProviderName> {
+  return (await resolveAiAdapter()).name;
 }
 
 /** Bir sağlayıcı adı verilerek de adaptör alınabilir (testler için). */
 export function getAdapterByName(name: AiProviderName): AiProviderAdapter {
-  return ADAPTERS[name]?.() ?? deterministicAdapter;
+  switch (name) {
+    case 'deterministic':
+      return deterministicAdapter;
+    default: {
+      // Test/araç kullanımı: ortam yapılandırmasından üret.
+      const cfg = envAdapterConfig();
+      if (cfg.provider !== name) return deterministicAdapter;
+      return buildAdapterFromConfig(cfg);
+    }
+  }
 }
 
 /** Görünen ad (arayüzde "hangi motor" bilgisi). */
 export function aiModeLabel(): string {
-  switch (activeProviderName()) {
+  const adapter = getAiAdapter();
+  switch (adapter.name) {
     case 'openai':
       return `OpenAI (${env.ai.openaiModel})`;
     case 'anthropic':
       return `Anthropic (${env.ai.anthropicModel})`;
+    case 'gemini':
+      return 'Google Gemini';
     default:
-      return 'Yerel Motor (Demo)';
+      return 'Yerel Motor';
   }
+}
+
+/** Çalışma alanı yapılandırmasından görünen ad üretir (asenkron). */
+export async function resolveAiModeLabel(): Promise<string> {
+  const wsId = currentAiWorkspaceId();
+  if (!wsId) return aiModeLabel();
+  const cfg = await getWorkspaceAiConfig(wsId);
+  if (cfg.provider === 'deterministic' || !cfg.key) return 'Yerel Motor';
+  const label = cfg.provider === 'openai' ? 'OpenAI' : cfg.provider === 'anthropic' ? 'Anthropic' : 'Google Gemini';
+  return cfg.model ? `${label} (${cfg.model})` : label;
 }
 
 /** AI kullanılabilir mi? (harici sağlayıcı yapılandırılmış ve anahtarı var mı) */
 export function isExternalAiAvailable(): boolean {
-  return activeProviderName() !== 'deterministic' && getAiAdapter().isAvailable();
+  const adapter = getAiAdapter();
+  return adapter.name !== 'deterministic' && adapter.isAvailable();
 }
 
 /** Phase 2+ yeteneklerinin şu an kapalı olduğunu bildirir (arayüz bilgisi). */

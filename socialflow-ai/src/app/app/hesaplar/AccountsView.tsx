@@ -77,7 +77,7 @@ export function AccountsView({
         `/api/accounts/${a.id}/connect`
       );
       if (res.demo) {
-        toast.info('Demo Modu bağlantısı', res.message ?? 'Hesap simülasyon olarak bağlı.');
+        toast.info('Bağlantı tamamlandı', res.message ?? 'Hesap bağlandı.');
       } else if (res.authorizeUrl) {
         toast.success('Yetkilendirme başlatılıyor', 'Resmî OAuth sayfasına yönlendiriliyorsunuz.');
         window.location.href = res.authorizeUrl;

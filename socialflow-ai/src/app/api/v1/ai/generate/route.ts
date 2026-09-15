@@ -2,7 +2,7 @@ import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import { apiRoute, ok, badRequest } from '@/lib/api';
 import { generate, TASK_LABELS, type AssistantTask } from '@/lib/ai/captionGenerationService';
 import prisma from '@/lib/prisma';
-import { aiModeLabel } from '@/lib/ai/llmClient';
+import { aiModeLabelAsync } from '@/lib/ai/llmClient';
 
 /** AI İçerik Asistanı */
 export const POST = apiRoute(
@@ -50,7 +50,7 @@ export const POST = apiRoute(
         : null
     });
 
-    return ok({ ...out, aiMode: aiModeLabel(), taskLabel: TASK_LABELS[task] });
+    return ok({ ...out, aiMode: await aiModeLabelAsync(), taskLabel: TASK_LABELS[task] });
   },
   { limit: 60 }
 );

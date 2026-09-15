@@ -69,7 +69,7 @@ async function main() {
       name: 'Kahve Dükkanı Ajans',
       slug: 'demo-ajans',
       plan: 'AGENCY',
-      demoMode: true,
+      demoMode: false,
       timezone: TZ,
       locale: 'tr-TR'
     }
@@ -87,7 +87,7 @@ async function main() {
       fontFamily: 'Inter',
       defaultLanguage: 'tr',
       defaultTimezone: TZ,
-      demoBanner: true,
+      demoBanner: false,
       aiProvider: 'deterministic'
     }
   });
@@ -247,12 +247,12 @@ async function main() {
         platform: p,
         status: 'NOT_CONFIGURED',
         credentialsSet: false,
-        message: 'API kimlik bilgileri tanımlanmadı. Demo Modu etkin.'
+        message: 'API kimlik bilgileri tanımlanmadı. Kimlik bilgileri tanımlanana kadar bu platform simülasyon olarak çalışır.'
       }
     });
   }
 
-  console.log('→ Sosyal medya hesapları bağlanıyor (demo)...');
+  console.log('→ Sosyal medya hesapları bağlanıyor...');
   const accounts: Record<string, string> = {};
   const accountDefs: [string, string, string, string, string][] = [
     ['INSTAGRAM', '@kahvedukkani', 'Kahve Dükkanı', 'BUSINESS', brand.id],
@@ -277,7 +277,7 @@ async function main() {
         displayName,
         accountType,
         connectionStatus: 'ACTIVE',
-        demoAccount: true,
+        demoAccount: false,
         externalId: `demo_${platform.toLowerCase()}_${slugify(handle)}`,
         scopes: 'demo_scopes',
         lastValidatedAt: new Date()

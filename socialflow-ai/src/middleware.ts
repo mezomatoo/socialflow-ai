@@ -19,13 +19,13 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSessionCookie = Boolean(request.cookies.get('sf_session')?.value);
 
-  // Önizleme/demo kolaylığı: çerez saklamayan iframe'de oturum çerezi geri
-  // gönderilemediğinden, geliştirme + demo modunda korumalı sayfalara erişime
+  // Önizleme kolaylığı: çerez saklamayan iframe'de oturum çerezi geri
+  // gönderilemediğinden, geliştirme ortamında korumalı sayfalara erişime
   // izin verilir (gerçek yetkilendirme sunucu tarafında getSession() içinde
-  // demo kullanıcıya düşerek yapılır). Üretimde (APP_ENV=production) kapalıdır.
+  // otomatik oturuma düşerek yapılır). Üretimde (APP_ENV=production) kapalıdır.
+  // Demo Modu (DEMO_MODE) bundan bağımsızdır; yalnızca demo uyarılarını etkiler.
   const previewAuth =
     process.env.APP_ENV !== 'production' &&
-    process.env.DEMO_MODE !== 'false' &&
     process.env.PREVIEW_AUTOLOGIN !== 'false';
   const effectiveSession = hasSessionCookie || previewAuth;
 

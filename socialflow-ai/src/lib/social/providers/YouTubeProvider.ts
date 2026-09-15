@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PostStatusResult, PublishPayload, PublishResult } from '../types';
@@ -19,8 +18,8 @@ export class YouTubeProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
-      clientId: env.providers.YOUTUBE.id,
-      clientSecret: env.providers.YOUTUBE.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'],
       scopeSeparator: ' ',
       extraAuthParams: { access_type: 'offline', prompt: 'consent' }

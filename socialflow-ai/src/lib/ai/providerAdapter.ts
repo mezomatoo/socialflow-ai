@@ -28,10 +28,10 @@ export interface AiProviderAdapter {
 
 const deterministicAdapter: AiProviderAdapter = {
   id: 'deterministic',
-  label: 'Yerel Motor (Demo)',
+  label: 'Yerel Motor',
   capabilities: ['textGeneration', 'structuredGeneration', 'visionAnalysis', 'transcription', 'embeddings'],
   health: 'ok',
-  textGeneration: async ({ system, user }) => ({ text: `[DEMO] ${user.slice(0, 120)}`, degraded: true }),
+  textGeneration: async ({ user }) => ({ text: user.slice(0, 120), degraded: true }),
   embeddings: async (texts) => texts.map(() => Array.from({ length: 384 }, () => Math.random() - 0.5)),
 };
 
@@ -49,10 +49,18 @@ const anthropicAdapter: AiProviderAdapter = {
   health: 'ok',
 };
 
+const geminiAdapter: AiProviderAdapter = {
+  id: 'gemini',
+  label: 'Google Gemini',
+  capabilities: ['textGeneration', 'structuredGeneration', 'visionAnalysis', 'imageGeneration', 'embeddings'],
+  health: 'ok',
+};
+
 const REGISTRY: Record<AiProvider, AiProviderAdapter> = {
   deterministic: deterministicAdapter,
   openai: openAiAdapter,
   anthropic: anthropicAdapter,
+  gemini: geminiAdapter,
 };
 
 export function getProvider(id?: AiProvider): AiProviderAdapter {
@@ -73,6 +81,6 @@ export function listProviders(): AiProviderAdapter[] {
 
 export function providerHealthMessage(): string {
   const p = getProvider();
-  if (p.id === 'deterministic') return 'AI demo modunda çalışıyor. Harici sağlayıcı yapılandırılmadı.';
+  if (p.id === 'deterministic') return 'AI yerel motorda çalışıyor. Harici sağlayıcı yapılandırılmadı.';
   return `${p.label} etkin.`;
 }
