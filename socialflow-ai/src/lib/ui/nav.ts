@@ -29,6 +29,11 @@ export const NAV_GROUPS: { id: string; label: string; items: NavItem[] }[] = [
     ]
   },
   {
+    id: 'community',
+    label: 'Topluluk ve Müşteriler',
+    items: [{ href: '/app/gelen-kutusu', label: 'Gelen Kutusu', icon: 'inbox', group: 'community' }]
+  },
+  {
     id: 'brand',
     label: 'Marka ve Hesaplar',
     items: [

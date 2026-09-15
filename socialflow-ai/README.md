@@ -145,3 +145,42 @@ docs/                 # Mimari, veritabanı, sağlayıcılar, dağıtım, güven
 8. AI, kullanıcının vermediği fiyat/indirim/tarih/teknik özellik/yasal-iddia/URL **uydurmaz**.
 
 Varsayılan yerel ayarlar: **Europe/Istanbul**, DD.MM.YYYY, 24 saat, TRY/₺, Türkçe.
+
+## Faz 5 — Gelen Kutusu, ilk aşama
+
+**Canlı sayfa:** `/app/gelen-kutusu` (menü: Topluluk ve Müşteriler → Gelen Kutusu).
+
+Bu checkout'ta Faz 5'in tamamı değil, ilk normalize gelen kutusu aşaması bulunmaktadır.
+Elle etkileşim ekleme, kalıcı iş kuyruğunda işleme, filtreleme, kişi atama, etiket,
+okundu işaretleme, çözüm/yeniden açma ve @üye bildirimli iç not çalışır.
+**Elle eklenen kayıtlar API verisi olarak gösterilmez. Sosyal ağa yanıt gönderilmez.**
+
+### Mevcut SQLite kurulumunu yükseltme
+
+Önce uygulama ve işçiyi durdurun. **Mevcut veritabanında `db:seed` veya `test:setup` çalıştırmayın**;
+önceki seed script'i veri temizler. Yedek alan ve başlangıç şemasını doğrulayan ekleyici komut:
+
+```bash
+python3 scripts/migrate-inbox.py prisma/dev.db
+npx prisma generate
+npm run dev
+# Ayrı terminalde, mevcut kalıcı kuyruk işçisi:
+npm run worker
+```
+
+Komut schema uyumsuzluğunda durur, `prisma/backups/` altına SQLite online backup alır,
+mevcut kayıt sayılarını ve foreign key'leri doğrular. İkinci çalıştırmada değişiklik yapmaz.
+Yeni boş bir kurulumda resmî Prisma motoruna erişimle `npx prisma migrate deploy` kullanılabilir.
+Var olan PostgreSQL kurulumuna SQLite SQL uygulamayın; bu repo SQLite kullanmaktadır.
+
+Testler için ayrı veritabanı gerekir: var olan `prisma/test.db` de aynı komutla yükseltilebilir.
+`npm test` mevcut 16 testi, `npm run test:inbox` yeni 16 testi çalıştırır.
+
+`FF_UNIFIED_INBOX=false` menüyü, sayfayı ve servis erişimini kapatır.
+`npm run worker`, yeni ve mevcut iş türleri için **aynı** Job tablosunu kullanır.
+Next 14 yapılandırmasında instrumentation hook etkin olmadığı için tek başına `npm run dev`
+worker başlatıldığını garanti etmez. Üretimde işçiyi süreç yöneticisi altında çalıştırın.
+Başarısız olaylar mevcut kuyruğun `FAILED` durumunda tutulur; yönetici yeniden deneme arayüzü henüz yoktur.
+
+Denetim: [docs/PHASE5_AUDIT.md](docs/PHASE5_AUDIT.md)
+Aşama raporu ve sonraki adımlar: [docs/PHASE5_STAGE1_REPORT.md](docs/PHASE5_STAGE1_REPORT.md)

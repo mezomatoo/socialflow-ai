@@ -8,6 +8,8 @@ import type { NextRequest } from 'next/server';
  */
 
 const PROTECTED_PREFIXES = [
+  '/app',
+  '/gelen-kutusu',
   '/anasayfa',
   '/yeni-icerik',
   '/takvim',

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from './zod-lite';
-import { ForbiddenError, UnauthorizedError, verifyCsrf, getSession, clientIp } from './auth/session';
+import { ForbiddenError, UnauthorizedError, verifyCsrf, getSession, clientIp, timingSafeEqualStr } from './auth/session';
 import { rateLimit, rateLimitHeaders } from './security/rateLimit';
 
 /**
@@ -51,6 +51,8 @@ export function serverError(message = 'Beklenmeyen bir hata oluştu. Lütfen tek
 }
 
 interface RouteOptions {
+  /** Opt-in session-bound CSRF for new inbox mutations; legacy routes unchanged. */
+  sessionCsrf?: boolean;
   /** Mutasyonlarda CSRF doğrulaması (varsayılan: açık) */
   csrf?: boolean;
   /** Hız sınırı: pencere başına istek */
@@ -61,7 +63,7 @@ interface RouteOptions {
 }
 
 export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, options: RouteOptions = {}) {
-  const { csrf = true, limit = 180, windowMs = 60_000, auth = true } = options;
+  const { sessionCsrf = false, csrf = true, limit = 180, windowMs = 60_000, auth = true } = options;
 
   return async (request: Request, routeCtx: { params: Ctx }): Promise<Response> => {
     const ip = clientIp(request);
@@ -84,6 +86,13 @@ export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, op
       if (auth) {
         session = await getSession();
         if (!session) return unauthorized();
+      }
+
+      if (sessionCsrf && session && session.sessionId !== 'preview-demo' && !['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())) {
+        const sent = request.headers.get('x-csrf-token') || '';
+        if (!sent || !timingSafeEqualStr(sent, session.csrfToken)) {
+          return fail('CSRF_FAILED', 'Güvenlik doğrulaması başarısız oldu. Sayfayı yenileyip tekrar deneyin.', 403);
+        }
       }
 
       const response = await handler(request, { params: routeCtx.params, session: session! });

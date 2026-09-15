@@ -1,3 +1,4 @@
+import { unavailableEngagement } from '../engagement';
 import type { PlatformRuleView } from '../../rules/ruleEngine';
 import type {
   AccountProfile,
@@ -32,6 +33,7 @@ export interface DemoOptions {
 }
 
 export class DemoProvider implements SocialProvider {
+  getEngagementCapabilities() { return unavailableEngagement(); }
   readonly platform: PlatformCode;
   readonly apiVersion = 'demo';
   private opts: DemoOptions;

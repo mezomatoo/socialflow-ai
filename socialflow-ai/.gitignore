@@ -17,3 +17,6 @@ next-env.d.ts
 # Test veritabanı
 prisma/test.db
 prisma/test.db-journal
+
+# Yerel migration yedekleri (müşteri verisi Git'e girmez)
+prisma/backups/

@@ -23,7 +23,21 @@ export const FEATURE_FLAGS = [
   'trendIntelligence',
   'competitorIntelligence',
   'automationEngine',
-  'semanticSearch'
+  'semanticSearch',
+  'unifiedInbox',
+  'directMessages',
+  'socialListening',
+  'reputationMonitoring',
+  'reviewManagement',
+  'socialCRM',
+  'leadManagement',
+  'agencyManagement',
+  'clientPortal',
+  'whiteLabel',
+  'publicApi',
+  'outgoingWebhooks',
+  'subscriptions',
+  'enterpriseSSO',
 ] as const;
 export type FeatureFlag = (typeof FEATURE_FLAGS)[number];
 
@@ -42,7 +56,21 @@ export const FEATURE_FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   trendIntelligence: false,
   competitorIntelligence: false,
   automationEngine: false,
-  semanticSearch: false
+  semanticSearch: false,
+  unifiedInbox: true,
+  directMessages: false,
+  socialListening: false,
+  reputationMonitoring: false,
+  reviewManagement: false,
+  socialCRM: false,
+  leadManagement: false,
+  agencyManagement: false,
+  clientPortal: false,
+  whiteLabel: false,
+  publicApi: false,
+  outgoingWebhooks: false,
+  subscriptions: false,
+  enterpriseSSO: false,
 };
 
 export const FEATURE_FLAG_LABELS: Record<FeatureFlag, string> = {
@@ -59,7 +87,21 @@ export const FEATURE_FLAG_LABELS: Record<FeatureFlag, string> = {
   trendIntelligence: 'Trend İstihbaratı',
   competitorIntelligence: 'Rakip İstihbaratı',
   automationEngine: 'Otomasyon Motoru',
-  semanticSearch: 'Anlamsal Arama'
+  semanticSearch: 'Anlamsal Arama',
+  unifiedInbox: 'Gelen Kutusu',
+  directMessages: 'Direkt Mesajlar',
+  socialListening: 'Sosyal Dinleme',
+  reputationMonitoring: 'Marka İzleme',
+  reviewManagement: 'İncelemeler',
+  socialCRM: 'Sosyal CRM',
+  leadManagement: 'Potansiyel Müşteriler',
+  agencyManagement: 'Ajans Yönetimi',
+  clientPortal: 'Müşteri Portalı',
+  whiteLabel: 'Beyaz Etiket',
+  publicApi: 'Dış API',
+  outgoingWebhooks: 'Giden Webhooklar',
+  subscriptions: 'Plan ve Kullanım',
+  enterpriseSSO: 'Kurumsal Tek Oturum',
 };
 
 function envKey(flag: FeatureFlag): string {

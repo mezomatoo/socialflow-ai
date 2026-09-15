@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from '@/lib/brandkit/featureFlags';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getAppBranding, brandingCssVariables } from '@/lib/settings/appSettings';
@@ -17,6 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div style={cssVars as React.CSSProperties}>
       <ToastProvider>
         <AppShell
+          inboxEnabled={isFeatureEnabled('unifiedInbox')}
           user={{
             id: session.user.id,
             name: session.user.name,

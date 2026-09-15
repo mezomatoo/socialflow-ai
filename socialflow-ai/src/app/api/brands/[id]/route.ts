@@ -71,6 +71,8 @@ export const DELETE = apiRoute(
     if (!brand) return notFound('Marka profili bulunamadı.');
     const inUse = await prisma.content.count({ where: { brandId: params.id } });
     if (inUse > 0) return badRequest(`Bu markaya ait ${inUse} içerik var. Marka silinemez.`);
+    const inboxCount = await prisma.socialConversation.count({ where: { workspaceId: session.user.workspaceId, brandId: params.id } });
+    if (inboxCount) return badRequest('Bu markanın konuşma geçmişi var. Veri saklama politikası uygulanmadan marka silinemez.');
     await prisma.brand.delete({ where: { id: params.id } });
     return ok({ deleted: true });
   },
