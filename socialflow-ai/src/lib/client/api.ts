@@ -25,6 +25,24 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/**
+ * Sürümlenmiş API öneki (§65).
+ * Çağrılar `/api/...` biçiminde yazılır; istemci bunları otomatik olarak
+ * `/api/v1/...` adresine yönlendirir. Böylece ileride v2 yayına alındığında
+ * çağrı noktalarının değişmesi gerekmez.
+ */
+export const API_VERSION = 'v1';
+export const API_BASE = `/api/${API_VERSION}`;
+
+/** `/api/x` → `/api/v1/x` (zaten sürümlenmiş veya harici adresler korunur). */
+export function versionedPath(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith(`${API_BASE}/`) || path === API_BASE) return path;
+  if (path.startsWith('/api/')) return `${API_BASE}/${path.slice('/api/'.length)}`;
+  if (path.startsWith('/')) return `${API_BASE}${path}`;
+  return `${API_BASE}/${path}`;
+}
+
 export interface ApiResponse<T> {
   ok: boolean;
   data?: T;
@@ -44,7 +62,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (csrf) headers.set('x-csrf-token', csrf);
   }
 
-  const res = await fetch(path, { ...init, headers, credentials: 'same-origin' });
+  const res = await fetch(versionedPath(path), { ...init, headers, credentials: 'same-origin' });
   const text = await res.text();
   let json: ApiResponse<T> | null = null;
   try {

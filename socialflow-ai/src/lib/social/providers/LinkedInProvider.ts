@@ -83,7 +83,7 @@ export class LinkedInProvider extends OAuth2Provider {
         ok: false,
         demoMode: payload.demoMode,
         friendlyMessage: 'LinkedIn yazar kimliği (URN) bulunamadı. Hesabı yeniden bağlayın.',
-        action: { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' },
+        action: { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' },
         retryable: false
       };
     }

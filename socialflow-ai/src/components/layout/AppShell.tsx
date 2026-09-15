@@ -39,8 +39,10 @@ const ROLE_LABELS: Record<string, string> = {
 export function AppShell({
   user,
   branding,
+  modules,
   children
 }: {
+  modules?: Record<string, { enabled: boolean; phase: number; label: string; notice: string }>;
   user: ShellUser;
   branding: ShellBranding;
   children: React.ReactNode;
@@ -92,7 +94,11 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Bildirimler Faz 3 modülüdür; kapalıyken API çağrılmaz ve zil gösterilmez.
+  const notificationsEnabled = modules?.notifications?.enabled ?? false;
+
   const openNotifications = async () => {
+    if (!notificationsEnabled) return;
     setNotifOpen((v) => !v);
     if (!notifOpen) {
       setLoadingNotif(true);
@@ -110,7 +116,7 @@ export function AppShell({
   const badgeFor = (key?: string) => {
     if (key === 'drafts') return counts.drafts;
     if (key === 'scheduled') return counts.scheduled;
-    if (key === 'notifications') return counts.unread;
+    if (key === 'notifications') return notificationsEnabled ? counts.unread : 0;
     return 0;
   };
 
@@ -129,7 +135,7 @@ export function AppShell({
         )}
       >
         <div className="flex h-16 items-center gap-3 border-b border-line px-4">
-          <Link href="/anasayfa" className="flex min-w-0 items-center gap-2.5">
+          <Link href="/app/dashboard" className="flex min-w-0 items-center gap-2.5">
             {branding.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={branding.logoUrl} alt={branding.appName} className="h-9 w-9 rounded-xl object-cover" />
@@ -199,7 +205,7 @@ export function AppShell({
 
         <div className="border-t border-line p-3">
           <Link
-            href="/yeni-icerik"
+            href="/app/icerik/yeni"
             className="btn-primary btn-md w-full"
             style={{ background: `linear-gradient(135deg, ${branding.primaryColor}, color-mix(in srgb, ${branding.primaryColor} 60%, #0ea5e9))` }}
           >
@@ -246,6 +252,7 @@ export function AppShell({
               </Badge>
             ) : null}
 
+            {notificationsEnabled && (
             <div className="relative">
               <button type="button" className="btn-icon relative h-9 w-9" onClick={openNotifications} aria-label="Bildirimler">
                 <Icon name="bell" size={17} />
@@ -284,7 +291,7 @@ export function AppShell({
                         notifications.map((n) => (
                           <Link
                             key={n.id}
-                            href={n.actionRoute ?? '/bildirimler'}
+                            href={n.actionRoute ?? '/app/bildirimler'}
                             className={clsx('flex gap-2.5 border-b border-line px-4 py-3 transition-colors last:border-0 hover:bg-surface-subtle', !n.readAt && 'bg-brand-50/40')}
                             onClick={async () => {
                               await api.post(`/api/notifications/${n.id}/read`).catch(() => undefined);
@@ -306,13 +313,14 @@ export function AppShell({
                         ))
                       )}
                     </div>
-                    <Link href="/bildirimler" className="block border-t border-line bg-surface-subtle px-4 py-2.5 text-center text-[12.5px] font-bold text-brand-600 hover:underline">
+                    <Link href="/app/bildirimler" className="block border-t border-line bg-surface-subtle px-4 py-2.5 text-center text-[12.5px] font-bold text-brand-600 hover:underline">
                       Tüm bildirimleri gör
                     </Link>
                   </div>
                 </>
               ) : null}
             </div>
+            )}
 
             <div className="relative">
               <button
@@ -341,10 +349,10 @@ export function AppShell({
                         {ROLE_LABELS[user.role] ?? user.role}
                       </Badge>
                     </div>
-                    <Link href="/ayarlar" className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold text-ink-muted hover:bg-surface-subtle hover:text-ink">
+                    <Link href="/app/ayarlar" className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold text-ink-muted hover:bg-surface-subtle hover:text-ink">
                       <Icon name="settings" size={15} /> Ayarlar
                     </Link>
-                    <Link href="/ayarlar/entegrasyonlar" className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold text-ink-muted hover:bg-surface-subtle hover:text-ink">
+                    <Link href="/app/ayarlar/entegrasyonlar" className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold text-ink-muted hover:bg-surface-subtle hover:text-ink">
                       <Icon name="key" size={15} /> Entegrasyon Durumu
                     </Link>
                     <button
@@ -423,10 +431,10 @@ function GlobalSearch({ onClose }: { onClose: () => void }) {
   const groups = useMemo(() => {
     if (!results) return [];
     return [
-      { label: 'İçerikler', icon: 'draft', items: (results.contents ?? []).map((c: any) => ({ href: `/yeni-icerik/${c.id}`, title: c.title ?? (c.masterCaption.slice(0, 60) || 'Başlıksız içerik'), sub: c.statusLabel })) },
+      { label: 'İçerikler', icon: 'draft', items: (results.contents ?? []).map((c: any) => ({ href: `/app/icerik/${c.id}`, title: c.title ?? (c.masterCaption.slice(0, 60) || 'Başlıksız içerik'), sub: c.statusLabel })) },
       { label: 'Markalar', icon: 'brand', items: (results.brands ?? []).map((b: any) => ({ href: `/marka-profilleri?brand=${b.id}`, title: b.name, sub: b.website ?? '' })) },
-      { label: 'Kampanyalar', icon: 'zap', items: (results.campaigns ?? []).map((c: any) => ({ href: `/takvim?campaign=${c.id}`, title: c.name, sub: c.code })) },
-      { label: 'Medya', icon: 'image', items: (results.media ?? []).map((m: any) => ({ href: `/medya?asset=${m.id}`, title: m.originalName, sub: `${m.kind} · ${m.format}` })) }
+      { label: 'Kampanyalar', icon: 'zap', items: (results.campaigns ?? []).map((c: any) => ({ href: `/app/takvim?campaign=${c.id}`, title: c.name, sub: c.code })) },
+      { label: 'Medya', icon: 'image', items: (results.media ?? []).map((m: any) => ({ href: `/app/medya?asset=${m.id}`, title: m.originalName, sub: `${m.kind} · ${m.format}` })) }
     ].filter((g) => g.items.length);
   }, [results]);
 

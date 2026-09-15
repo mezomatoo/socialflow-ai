@@ -1,3 +1,5 @@
+import { isModuleEnabled } from '../phase/phaseGates';
+import { notFound } from '../errors';
 import prisma from '../prisma';
 import { getAllRules, type PlatformRuleView } from '../rules/ruleEngine';
 import { validateMediaForRule, checkSafeArea } from '../media/validate';
@@ -18,7 +20,8 @@ import type { MediaIssue } from '../media/types';
 
 export interface CheckLine {
   code: string;
-  level: 'OK' | 'WARNING' | 'ERROR';
+  /** INFO: bilgilendirme — Faz 1'de ilgili modül kapalı olduğu için engellemez. */
+  level: 'OK' | 'INFO' | 'WARNING' | 'ERROR';
   message: string;
 }
 
@@ -41,20 +44,31 @@ export interface TargetCheck {
 export interface PreflightReport {
   contentId: string;
   targets: TargetCheck[];
+  /** Yayına hazır hedef sayısı (Faz 2 ön koşulları dâhil). */
   readyCount: number;
+  /** İçerik kalitesi/platform kuralları açısından hazır hedef sayısı (Faz 1). */
+  contentReadyCount: number;
   totalCount: number;
   headline: string;
+  /** Faz 1'de yalnızca İÇERİK engelleri bloklar; hesap/planlama Faz 2 konusudur. */
   blocking: boolean;
+  contentBlocking: boolean;
+  /** Faz 2'de yayın için gereken ek koşullar (ör. hesap bağlama). */
+  publishingPending: number;
+  phase1Mode: boolean;
   demoMode: boolean;
 }
 
 export async function runPreflight(
   contentId: string,
   workspaceId: string,
-  options: { demoMode?: boolean } = {}
+  options: { demoMode?: boolean; phase1Mode?: boolean } = {}
 ): Promise<PreflightReport> {
-  const content = await prisma.content.findUnique({
-    where: { id: contentId },
+  // Yayınlama modülü kapalıysa (Faz 1) ön kontrol içerik odaklı çalışır.
+  const phase1Mode = options.phase1Mode ?? !isModuleEnabled('socialPublishing');
+  // Çalışma alanı izolasyonu (§14): başka çalışma alanının içeriği doğrulanamaz.
+  const content = await prisma.content.findFirst({
+    where: { id: contentId, workspaceId },
     include: {
       media: { include: { media: true } },
       platformContents: {
@@ -64,7 +78,7 @@ export async function runPreflight(
       brand: true
     }
   });
-  if (!content) throw new Error('İçerik bulunamadı.');
+  if (!content) throw notFound('İçerik bulunamadı.');
 
   const rules = await getAllRules(workspaceId);
   const primaryMedia = content.media[0]?.media ?? null;
@@ -83,9 +97,16 @@ export async function runPreflight(
         message: `${platformName} için platform kuralı bulunamadı. Yönetici ayarlarından kuralları yükleyin.`
       });
     } else {
-      // Hesap bağlantısı
+      // Hesap bağlantısı — Faz 1'de hesap bağlama KAPALI olduğu için bu kontrol
+      // engelleyici DEĞİLDİR; kullanıcıya dürüst bir bilgi satırı gösterilir (§3).
       if (!pc.socialAccount) {
-        checks.push({ code: 'ACCOUNT_MISSING', level: 'ERROR', message: 'Bu hedef için sosyal medya hesabı seçilmedi.' });
+        checks.push({
+          code: 'ACCOUNT_MISSING',
+          level: phase1Mode ? 'INFO' : 'ERROR',
+          message: phase1Mode
+            ? 'Sosyal hesap bağlama Faz 2’de etkinleşecek — içeriğiniz hesap seçmeden de hazırlanabilir.'
+            : 'Bu hedef için sosyal medya hesabı seçilmedi.'
+        });
       } else if (pc.socialAccount.connectionStatus !== 'ACTIVE') {
         checks.push({
           code: 'ACCOUNT_INACTIVE',
@@ -233,21 +254,40 @@ export async function runPreflight(
   }
 
   const readyCount = targets.filter((t) => t.ready).length;
+  // İçerik hazırlığı: yalnızca İÇERİK kaynaklı hatalar (kural, medya, metin,
+  // hashtag). Hesap/planlama gibi Faz 2 koşulları bu sayıya dâhil edilmez.
+  const contentReadyCount = targets.filter(
+    (t) => !t.checks.some((c) => c.level === 'ERROR' && c.code !== 'ACCOUNT_MISSING' && c.code !== 'ACCOUNT_INACTIVE')
+  ).length;
   const totalCount = targets.length;
+  const contentBlocking = contentReadyCount === 0 && totalCount > 0;
+  const publishingPending = targets.filter((t) => !t.ready).length;
+
   const headline =
     totalCount === 0
       ? 'Yayınlanacak hedef seçilmedi.'
-      : readyCount === totalCount
-        ? `${readyCount} / ${totalCount} platform yayına hazır`
-        : `${readyCount} / ${totalCount} platform yayına hazır — ${totalCount - readyCount} hedefte sorun var`;
+      : phase1Mode
+        ? contentReadyCount === totalCount
+          ? `${contentReadyCount} / ${totalCount} hedef platform kurallarına uygun`
+          : `${contentReadyCount} / ${totalCount} hedef platform kurallarına uygun — ${totalCount - contentReadyCount} hedefte düzeltme gerekiyor`
+        : readyCount === totalCount
+          ? `${readyCount} / ${totalCount} platform yayına hazır`
+          : `${readyCount} / ${totalCount} platform yayına hazır — ${totalCount - readyCount} hedefte sorun var`;
 
   return {
     contentId,
     targets,
     readyCount,
+    contentReadyCount,
     totalCount,
     headline,
-    blocking: readyCount === 0 || targets.some((t) => t.checks.some((c) => c.level === 'ERROR')),
+    // Faz 1'de yayınlama kapalıdır; bu yüzden yalnızca içerik engelleri bloklar.
+    blocking: phase1Mode
+      ? contentBlocking
+      : readyCount === 0 || targets.some((t) => t.checks.some((c) => c.level === 'ERROR')),
+    contentBlocking,
+    publishingPending,
+    phase1Mode,
     demoMode: options.demoMode ?? true
   };
 }

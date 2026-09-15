@@ -50,6 +50,18 @@ export interface HashtagOptimizeResult {
 }
 
 /** Türkçe durak sözcükler — etiket üretiminde kullanılmaz. */
+// Türkçe'de etiket olarak ANLAMSIZ kalan ek/çekim biçimleri: iyelik ve kişi
+// ekli fiil/isim formları, soru ve bağlaç parçacıkları. Bunlar etiket olarak
+// kullanıldığında (#ürünlerimiz gibi) profesyonel görünmez ve arama değeri taşımaz.
+const SUFFIX_NOISE = new Set([
+  'urunlerimiz', 'urunlerimizi', 'urunlerimizin', 'urunumuz', 'hizmetlerimiz', 'hizmetimiz',
+  'calismalarimiz', 'musterilerimiz', 'mutlulugunuz', 'keyfini', 'sizleri', 'sizler',
+  'hepiniz', 'hepimiz', 'birlikteyiz', 'yaninizdayiz', 'buradayiz', 'haziriz',
+  'kesfedin', 'inceleyin', 'bakabilirsiniz', 'ulassin', 'dilerseniz', 'isterseniz',
+  'yapabilirsiniz', 'edebilirsiniz', 'kacin', 'toplayin', 'olacak', 'oldu', 'kaldi',
+  'devam', 'bizi', 'takip', 'edin', 'girin', 'secin', 'gormek', 'ister', 'misiniz'
+]);
+
 const STOPWORDS = new Set(
   `ve veya ile için ama fakat çünkü bu şu o bunlar şunlar onlar bir iki çok daha en kadar gibi göre göre
    yani ayrıca hem ne mi mı mu mü de da ki ise çok daha çok yeni şimdi bugün yarın hemen burada orada
@@ -70,7 +82,18 @@ export function extractKeywords(text: string, limit = 12): string[] {
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .map((w) => w.trim())
-    .filter((w) => w.length > 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !STOPWORDS.has(w) &&
+        !SUFFIX_NOISE.has(w) &&
+        // Etiket olarak anlamsız çekim ekleri: iyelik (-imiz/-iniz/-lerimiz),
+        // edilgen/geçmiş (-ilmiştir/-miştir) ve çoğul kişi biçimleri.
+        !/^[a-zçğıöşü]{4,}(lerimiz|larimiz|imizin|inizin|inizi|imizi|leriniz|lariniz)$/.test(w) &&
+        !/^[a-zçğıöşü]{3,}(ilmiştir|ilmistir|miştir|mistir|mıştır|mıştir|muştur|mustur|müştür|mustur)$/.test(w) &&
+        !/^[a-zçğıöşü]{4,}(miş|miş|mış|mış|muş|müş)(tir|tır|tur|tür)?$/.test(w) &&
+        !/^\d+$/.test(w)
+    );
 
   const freq = new Map<string, number>();
   for (const w of words) freq.set(w, (freq.get(w) ?? 0) + 1);

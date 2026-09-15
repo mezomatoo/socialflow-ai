@@ -216,6 +216,48 @@ export function protectedTermWeight(term: string): number {
   return 4.0; // ürün adı / diğer
 }
 
+/**
+ * "Bilgi çıpası" (fact anchor): içinde fiyat/indirim/tarih/bağlantı/mention gibi
+ * KORUNMASI ZORUNLU ticari bilgi bulunan cümleler. Kısaltma sırasında bu
+ * cümleler önce rezerve edilir; aksi halde skorlama, kampanya bilgisini
+ * düşürüp yerine tanıtım cümlesini koyabilir (§35).
+ */
+export function factAnchorIndexes(
+  sentences: string[],
+  protectedTerms: string[],
+  options: { minWeight?: number } = {}
+): number[] {
+  const minWeight = options.minWeight ?? 5;
+  const out: number[] = [];
+  sentences.forEach((sentence, i) => {
+    const lower = sentence.toLocaleLowerCase('tr-TR');
+    const weight = protectedTerms.reduce(
+      (acc, term) => (term && lower.includes(term.toLocaleLowerCase('tr-TR')) ? Math.max(acc, protectedTermWeight(term)) : acc),
+      0
+    );
+    if (weight >= minWeight) out.push(i);
+  });
+  return out;
+}
+
+/**
+ * Bilgi çıpalarını (fiyat/indirim/tarih/bağlantı taşıyan cümleler) TAMAMEN
+ * kapsayacak metin bütçesi. Kısaltma hedefi bunun altına inemez; inerse
+ * kampanya bilgisi kaybolur (§35).
+ */
+export function factSentenceBudget(sentences: string[], protectedTerms: string[]): number | null {
+  const idx = factAnchorIndexes(sentences, protectedTerms);
+  if (!idx.length) return null;
+  return idx.reduce((acc, i, n) => acc + charLength(sentences[i]) + (n ? 1 : 0), 0);
+}
+
+/** Geriye dönük uyumluluk: en kısa bilgi çıpası cümlesinin uzunluğu. */
+export function shortestFactSentenceLength(sentences: string[], protectedTerms: string[]): number | null {
+  const idx = factAnchorIndexes(sentences, protectedTerms);
+  if (!idx.length) return null;
+  return Math.min(...idx.map((i) => charLength(sentences[i])));
+}
+
 export function scoreSentence(sentence: string, index: number, total: number, protectedTerms: string[], brandNames: string[]): number {
   const lower = sentence.toLocaleLowerCase('tr-TR');
   let score = 0;
@@ -305,14 +347,40 @@ export interface CompressOptions {
  */
 export function selectBestSubset(
   items: { i: number; len: number; score: number }[],
-  limit: number
+  limit: number,
+  options: { mustInclude?: number[] } = {}
 ): number[] {
   const n = items.length;
   if (n === 0) return [];
-  if (n <= 16) {
+
+  // Bilgi çıpaları: bütçe elverdiğince ÖNCE rezerve edilir. Böylece kampanya
+  // bilgisi (fiyat/tarih) taşıyan cümle, tanıtım cümlesi uğruna düşürülmez.
+  const reserved: number[] = [];
+  if (options.mustInclude?.length) {
+    const reservedItems = options.mustInclude
+      .map((i) => items.find((it) => it.i === i))
+      .filter((it): it is { i: number; len: number; score: number } => Boolean(it))
+      .sort((a, b) => a.len - b.len);
+    let used = 0;
+    for (const it of reservedItems) {
+      const add = it.len + (reserved.length ? 1 : 0);
+      if (used + add <= limit) {
+        reserved.push(it.i);
+        used += add;
+      }
+    }
+    items = items.filter((it) => !reserved.includes(it.i));
+    limit -= used;
+    if (items.length === 0) return reserved.sort((a, b) => a - b);
+  }
+
+  const finish = (picked: number[]) => [...reserved, ...picked].sort((a, b) => a - b);
+
+  const m = items.length;
+  if (m <= 16) {
     let bestScore = -Infinity;
     let bestMask = 0;
-    const total = 1 << n;
+    const total = 1 << m;
     for (let mask = 1; mask < total; mask++) {
       let chars = 0;
       let sc = 0;
@@ -337,8 +405,12 @@ export function selectBestSubset(
       }
     }
     const out: number[] = [];
-    for (let b = 0; b < n; b++) if (bestMask & (1 << b)) out.push(items[b].i);
-    return out;
+    for (let b = 0; b < m; b++) if (bestMask & (1 << b)) out.push(items[b].i);
+    if (out.length === 0 && items.length) {
+      // Hiçbir tek cümle bile sığmadıysa rezerve edilenler korunur.
+      return finish([]);
+    }
+    return finish(out);
   }
   // Açgözlü (büyük girdiler): yoğunluk = puan / (uzunluk + 20)
   const byDensity = [...items].sort(
@@ -350,7 +422,7 @@ export function selectBestSubset(
     const add = it.len + (out.length ? 1 : 0);
     if (used + add <= limit) { out.push(it.i); used += add; }
   }
-  return out.sort((a, b) => a - b);
+  return finish(out);
 }
 
 export function compressTurkish(input: string, limit: number, options: CompressOptions = {}): CompressResult {
@@ -396,7 +468,12 @@ export function compressTurkish(input: string, limit: number, options: CompressO
       i,
       score: scoreSentence(s, i, sentences.length, protectedTerms, brandNames)
     }));
-    const keepIdx = selectBestSubset(scored.map((x) => ({ i: x.i, len: charLength(x.s), score: x.score })), limit);
+    const anchors = factAnchorIndexes(sentences, protectedTerms);
+    const keepIdx = selectBestSubset(
+      scored.map((x) => ({ i: x.i, len: charLength(x.s), score: x.score })),
+      limit,
+      { mustInclude: anchors }
+    );
     if (keepIdx.length > 0) {
       keepIdx.sort((a, b) => a - b); // belge sırasını koru
       const packed = keepIdx.map((i) => sentences[i]).join(' ');

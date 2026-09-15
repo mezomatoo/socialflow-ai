@@ -46,7 +46,7 @@ export class DemoProvider implements SocialProvider {
   }
 
   getAuthorizationUrl(): string {
-    return '/sosyal-hesaplar?demo=1';
+    return '/app/hesaplar?demo=1';
   }
 
   async exchangeCode(): Promise<TokenSet> {
@@ -97,7 +97,7 @@ export class DemoProvider implements SocialProvider {
         providerMessage: 'Simulated provider failure',
         httpStatus: 401,
         friendlyMessage: `${this.label} oturumunuzun süresi dolmuş. Hesabınızı yeniden bağlamanız gerekiyor.`,
-        action: { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' },
+        action: { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' },
         retryable: false
       };
     }

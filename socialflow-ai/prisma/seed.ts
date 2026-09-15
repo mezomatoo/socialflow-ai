@@ -5,13 +5,12 @@
  * NOT: Analitik verisi ÜRETMEZ. "Analizler" ekranı demo modunda boş kalır ve
  * bunu kullanıcıya açıkça belirtir.
  */
-import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { BUILTIN_RULES } from '../src/lib/platforms/builtinRules';
 
-const prisma = new PrismaClient();
+import prisma from '../src/lib/prisma';
 
 const TZ = 'Europe/Istanbul';
 

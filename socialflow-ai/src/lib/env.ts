@@ -39,9 +39,15 @@ export const env = {
     provider: str('AI_PROVIDER', 'deterministic') as 'deterministic' | 'openai' | 'anthropic',
     demoMode: bool('AI_DEMO_MODE', true),
     openaiKey: str('OPENAI_API_KEY'),
+    // Taban URL yapılandırılabilir: kurumsal ağ geçitleri (Azure OpenAI, LiteLLM,
+    // vLLM) ve testler aynı kodla çalışabilsin.
+    openaiBaseUrl: str('OPENAI_BASE_URL', 'https://api.openai.com/v1').replace(/\/+$/, ''),
     openaiModel: str('OPENAI_MODEL', 'gpt-4o-mini'),
     anthropicKey: str('ANTHROPIC_API_KEY'),
-    anthropicModel: str('ANTHROPIC_MODEL', 'claude-3-5-sonnet-latest')
+    anthropicBaseUrl: str('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1').replace(/\/+$/, ''),
+    anthropicModel: str('ANTHROPIC_MODEL', 'claude-3-5-sonnet-latest'),
+    /** Yapay zekâ çağrısı zaman aşımı (ms). Dolduğunda yerel motora düşülür. */
+    timeoutMs: int('AI_TIMEOUT_MS', 20_000)
   },
   /** Gerçek sosyal medya paylaşımı kapalıysa true. */
   demoMode: bool('DEMO_MODE', true),

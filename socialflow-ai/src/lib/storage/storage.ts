@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { env } from '../env';
+import { AppError } from '../errors';
+import { EMPTY_SHA256, presignV4, sha256Hex, signV4 } from './sigv4';
 
 /**
  * Depolama soyutlaması (Storage Driver)
@@ -63,7 +65,7 @@ class LocalStorage implements StorageDriver {
   }
 
   url(key: string): string {
-    return `/api/media/file/${safeKey(key)}`;
+    return `/api/v1/media/file/${safeKey(key)}`;
   }
 
   async exists(key: string): Promise<boolean> {
@@ -77,35 +79,133 @@ class LocalStorage implements StorageDriver {
 }
 
 /**
- * S3 sürücüsü — iskelet. Üretimde `@aws-sdk/client-s3` ve
- * `@aws-sdk/s3-request-presigner` eklenerek aktif edilir.
- * Arayüz LocalStorage ile aynıdır, böylece geçiş şeffaftır.
+ * S3 uyumlu nesne deposu (AWS, MinIO, R2, B2, Wasabi …).
+ * SigV4 imzası `./sigv4` içinde bağımlılıksız üretilir; gizli anahtarlar
+ * yalnızca sunucuda kalır, tarayıcıya yalnızca ön imzalı URL gider (§16).
  */
 class S3Storage implements StorageDriver {
   name = 's3';
+  private endpoint: string | null;
+  private bucket: string;
+  private region: string;
+  private accessKeyId: string;
+  private secretAccessKey: string;
+  private forcePathStyle: boolean;
 
-  private ensureClient(): never {
-    throw new Error(
-      'S3 depolama sürücüsü yapılandırılmamış. `@aws-sdk/client-s3` paketini ekleyip STORAGE_DRIVER=s3 ve S3_* ortam değişkenlerini tanımlayın. Yerel sürücüye dönmek için STORAGE_DRIVER=local kullanın.'
-    );
+  constructor() {
+    const cfg = env.s3;
+    if (!cfg.bucket || !cfg.accessKeyId || !cfg.secretAccessKey) {
+      throw new Error(
+        'S3 depolama yapılandırması eksik. S3_BUCKET, S3_ACCESS_KEY_ID ve S3_SECRET_ACCESS_KEY değişkenlerini tanımlayın (yerel sürücü için STORAGE_DRIVER=local).'
+      );
+    }
+    this.endpoint = cfg.endpoint ? cfg.endpoint.replace(/\/$/, '') : null;
+    this.bucket = cfg.bucket;
+    this.region = cfg.region || 'us-east-1';
+    this.accessKeyId = cfg.accessKeyId;
+    this.secretAccessKey = cfg.secretAccessKey;
+    this.forcePathStyle = cfg.forcePathStyle !== false;
   }
 
-  async put(): Promise<StoredObject> {
-    return this.ensureClient();
+  /** İstek hedefi: sanal host (AWS) veya yol tabanlı (MinIO/R2). */
+  private target(key?: string) {
+    const safe = key ? safeKey(key) : '';
+    if (!this.endpoint) {
+      const host = `${this.bucket}.s3.${this.region}.amazonaws.com`;
+      return { url: `https://${host}/${safe}`, host, path: `/${safe}` };
+    }
+    const base = new URL(this.endpoint);
+    const host = this.forcePathStyle ? base.host : `${this.bucket}.${base.host}`;
+    const prefix = this.forcePathStyle ? `/${this.bucket}` : '';
+    return { url: `${base.protocol}//${host}${prefix}/${safe}`, host, path: `${prefix}/${safe}` };
   }
-  async get(): Promise<Buffer | null> {
-    return this.ensureClient();
+
+  private amzDate() {
+    return new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
   }
-  async delete(): Promise<void> {
-    return this.ensureClient();
+
+  private async request(method: string, key: string | undefined, body?: Buffer, mimeType?: string) {
+    const { url, host, path } = this.target(key);
+    const payloadHash = body ? sha256Hex(body) : EMPTY_SHA256;
+    const headers: Record<string, string> = body && mimeType ? { 'content-type': mimeType } : {};
+    const signed = signV4({
+      method,
+      host,
+      path,
+      headers,
+      payloadHash,
+      region: this.region,
+      accessKeyId: this.accessKeyId,
+      secretAccessKey: this.secretAccessKey,
+      amzDate: this.amzDate()
+    });
+    return fetch(url, {
+      method,
+      headers: {
+        ...headers,
+        'x-amz-content-sha256': payloadHash,
+        'x-amz-date': signed.stringToSign.split('\n')[1],
+        authorization: signed.authorization
+      },
+      body: body ? new Uint8Array(body) : undefined,
+      cache: 'no-store'
+    });
   }
+
+  async put(key: string, data: Buffer | Uint8Array, mimeType: string): Promise<StoredObject> {
+    const buf = Buffer.from(data);
+    const res = await this.request('PUT', key, buf, mimeType);
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new AppError('STORAGE_ERROR', 'Medya nesne deposuna yüklenemedi.', {
+        status: 502,
+        details: { status: res.status, detail: detail.slice(0, 200) },
+        recoverable: true
+      });
+    }
+    return { storageKey: key, publicUrl: this.url(key), bytes: buf.length, mimeType };
+  }
+
+  async get(key: string): Promise<Buffer | null> {
+    const res = await this.request('GET', key);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new AppError('STORAGE_ERROR', 'Medya nesne deposundan okunamadı.', {
+        status: 502,
+        details: { status: res.status },
+        recoverable: true
+      });
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  async delete(key: string): Promise<void> {
+    const res = await this.request('DELETE', key);
+    if (!res.ok && res.status !== 404) {
+      throw new AppError('STORAGE_ERROR', 'Medya nesne deposundan silinemedi.', {
+        status: 502,
+        details: { status: res.status },
+        recoverable: true
+      });
+    }
+  }
+
+  async exists(key: string): Promise<boolean> {
+    const res = await this.request('HEAD', key);
+    return res.ok;
+  }
+
+  /** Tarayıcıya verilen adres: ön imzalı, süreli (kimlik bilgisi içermez). */
   url(key: string): string {
-    const { endpoint, bucket, region } = env.s3;
-    if (endpoint) return `${endpoint.replace(/\/$/, '')}/${bucket}/${safeKey(key)}`;
-    return `https://${bucket}.s3.${region}.amazonaws.com/${safeKey(key)}`;
-  }
-  async exists(): Promise<boolean> {
-    return this.ensureClient();
+    const { host, path } = this.target(key);
+    return presignV4({
+      host,
+      path,
+      region: this.region,
+      accessKeyId: this.accessKeyId,
+      secretAccessKey: this.secretAccessKey,
+      amzDate: this.amzDate()
+    });
   }
 }
 

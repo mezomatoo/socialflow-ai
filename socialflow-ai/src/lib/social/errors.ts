@@ -16,9 +16,9 @@ interface ErrorRule {
   retryable: boolean;
 }
 
-const RECONNECT = { label: 'Hesabı Yeniden Bağla', route: '/sosyal-hesaplar' };
+const RECONNECT = { label: 'Hesabı Yeniden Bağla', route: '/app/hesaplar' };
 const RETRY = { label: 'Tekrar Dene', route: '' };
-const SETTINGS = { label: 'Entegrasyon Ayarları', route: '/ayarlar/entegrasyonlar' };
+const SETTINGS = { label: 'Entegrasyon Ayarları', route: '/app/ayarlar/entegrasyonlar' };
 
 const RULES: ErrorRule[] = [
   // --- Token / yetkilendirme ---

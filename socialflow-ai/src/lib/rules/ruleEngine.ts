@@ -50,6 +50,8 @@ export interface PlatformRuleView {
   safeArea: { top: number; bottom: number; left: number; right: number } | null;
   restrictions: string[];
   apiVersion: string;
+  /** Kural sürümü — üretilen içerikler hangi sürümle oluştuğunu saklar (§11). */
+  version: number;
   capabilities: string[];
   source: string;
   lastUpdatedAt: Date;
@@ -121,6 +123,7 @@ function fromRow(row: any): PlatformRuleView {
     safeArea: parseJsonObject(row.safeArea),
     restrictions: parseJsonArray(row.restrictions),
     apiVersion: row.apiVersion ?? 'v1',
+    version: Number(row.version ?? 1),
     capabilities: parseJsonArray(row.capabilities),
     source: row.source ?? 'BUILTIN',
     lastUpdatedAt: row.lastUpdatedAt ? new Date(row.lastUpdatedAt) : new Date(),
@@ -297,11 +300,49 @@ export async function updateRule(
     return out;
   };
 
+  const existing = await prisma.platformRule.findUnique({ where });
+
   const data = normalize({ ...patch, source: 'MANUAL', lastUpdatedAt: new Date() } as Record<string, unknown>);
 
   const row = await prisma.platformRule.update({ where, data: data as any });
   invalidateRuleCache(workspaceId);
+
+  // Sürümleme (§11): eski tanım SİLİNMEZ. Yeni sürüm numarasıyla anlık görüntü
+  // saklanır; üretilmiş içerikler kullandıkları sürümü referans alır.
+  if (existing) {
+    const nextVersion = Number(existing.version ?? 1) + 1;
+    await prisma.platformRule.update({ where, data: { version: nextVersion } });
+    await prisma.platformRuleVersion
+      .create({
+        data: {
+          platformRuleId: existing.id,
+          workspaceId,
+          platform,
+          contentType,
+          version: existing.version ?? 1,
+          label: existing.label,
+          snapshot: JSON.stringify(existing),
+          changeNote: patch && Object.keys(patch).length ? `Güncellenen alanlar: ${Object.keys(patch).join(', ')}` : null
+        }
+      })
+      .catch(() => undefined);
+    const updated = await prisma.platformRule.findUnique({ where });
+    return fromRow(updated ?? row);
+  }
+
   return fromRow(row);
+}
+
+/**
+ * Bir kuralın sürüm geçmişi (denetim ve içerik-kural izlenebilirliği için).
+ */
+export async function listRuleVersions(workspaceId: string, platform: string, contentType: string) {
+  return prisma.platformRuleVersion.findMany({
+    where: { workspaceId, platform, contentType },
+    orderBy: { version: 'desc' },
+    take: 20,
+    select: { id: true, version: true, label: true, changeNote: true, createdAt: true }
+  });
 }
 
 /** Kural motorunun özet görünümü (kullanıcı arayüzü için). */

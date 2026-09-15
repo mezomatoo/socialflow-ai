@@ -110,7 +110,7 @@ export function ContentListView({
         masterCaption: c.masterCaption ?? ''
       });
       toast.success('Kopya taslak oluşturuldu', 'Düzenlemek için açılıyor.');
-      window.location.href = `/yeni-icerik/${created.id}`;
+      window.location.href = `/app/icerik/${created.id}`;
     } catch (e) {
       toast.error('Kopyalanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
@@ -139,7 +139,7 @@ export function ContentListView({
           <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">{title}</h1>
           <p className="mt-1 text-[13.5px] text-ink-muted">{subtitle}</p>
         </div>
-        <Link href="/yeni-icerik" className="btn-primary btn-md">
+        <Link href="/app/icerik/yeni" className="btn-primary btn-md">
           <Icon name="plus" size={16} /> Yeni İçerik
         </Link>
       </div>
@@ -182,7 +182,7 @@ export function ContentListView({
               description={items.length === 0 ? emptyDescription : 'Arama veya filtre ölçütlerini değiştirmeyi deneyin.'}
               action={
                 items.length === 0 ? (
-                  <Link href="/yeni-icerik" className="btn-primary btn-md">
+                  <Link href="/app/icerik/yeni" className="btn-primary btn-md">
                     <Icon name="plus" size={15} /> Yeni İçerik
                   </Link>
                 ) : (
@@ -211,7 +211,7 @@ export function ContentListView({
               <li key={c.id}>
                 <div className="card card-hover flex gap-3 p-3">
                   <Link
-                    href={`/yeni-icerik/${c.id}`}
+                    href={`/app/icerik/${c.id}`}
                     className="checkerboard relative h-[86px] w-[86px] shrink-0 overflow-hidden rounded-xl border border-line bg-surface-subtle"
                   >
                     {thumb ? (
@@ -231,7 +231,7 @@ export function ContentListView({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/yeni-icerik/${c.id}`} className="min-w-0 flex-1">
+                      <Link href={`/app/icerik/${c.id}`} className="min-w-0 flex-1">
                         <h3 className="truncate text-[14.5px] font-bold text-ink hover:text-brand-600">
                           {c.title || c.masterCaption?.slice(0, 60) || 'İsimsiz içerik'}
                         </h3>
@@ -288,7 +288,7 @@ export function ContentListView({
                         <button className="btn-ghost btn-sm" title="Sil" disabled={busyId === c.id} onClick={() => remove(c)}>
                           <Icon name="trash" size={14} />
                         </button>
-                        <Link href={`/yeni-icerik/${c.id}`} className="btn-secondary btn-sm">
+                        <Link href={`/app/icerik/${c.id}`} className="btn-secondary btn-sm">
                           Aç <Icon name="arrowRight" size={13} />
                         </Link>
                       </div>
