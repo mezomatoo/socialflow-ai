@@ -94,8 +94,8 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     id: 'automation',
     phase: 5,
     label: 'Otomasyon Motoru',
-    defaultEnabled: false,
-    notice: 'Otomasyon motoru bu kurulumda henüz etkin değil.'
+    defaultEnabled: true,
+    notice: 'Otomasyon motoru bu kurulumda kapalı.'
   },
   inbox: {
     id: 'inbox',

@@ -214,7 +214,9 @@ describe('Modül kapıları (sahte çalışma yok)', () => {
     assert.equal(state.analytics.enabled, true);
     assert.equal(state.notifications.enabled, true);
     assert.equal(state.aiAssistant.enabled, true);
-    assert.equal(state.automation.enabled, false);
+    // Otomasyon motoru (kural + yürütme + döngü koruması) gerçek çalıştığı için açıktır.
+    assert.equal(state.automation.enabled, true);
+    assert.equal(state.inbox.enabled, false, 'henüz gerçek modül olmayan gelen kutusu kapalıdır');
     assert.equal(state.creativeStudio.enabled, true, 'AI Stüdyo tam zincirle çalıştığı için varsayılan açıktır');
     assert.ok(moduleNotice('analytics').length > 10);
     // Müşteriye dönük mesajlarda geliştirme fazı terminolojisi yoktur
@@ -225,20 +227,20 @@ describe('Modül kapıları (sahte çalışma yok)', () => {
 
   it('kapalı modül 501 (MODULE_NOT_ENABLED) hatası verir — sahte başarı yok', () => {
     assert.throws(
-      () => assertModuleEnabled('automation'),
+      () => assertModuleEnabled('inbox'),
       (err: unknown) => err instanceof AppError && err.code === 'MODULE_NOT_ENABLED' && err.status === 501
     );
   });
 
   it('bayrakla modül açılıp kapatılabilir (tek doğruluk kaynağı korunur)', () => {
-    process.env.FF_AUTOMATION = 'true';
+    process.env.FF_INBOX = 'true';
     try {
-      assert.equal(isModuleEnabled('automation'), true);
-      assert.doesNotThrow(() => assertModuleEnabled('automation'));
+      assert.equal(isModuleEnabled('inbox'), true);
+      assert.doesNotThrow(() => assertModuleEnabled('inbox'));
     } finally {
-      delete process.env.FF_AUTOMATION;
+      delete process.env.FF_INBOX;
     }
-    assert.equal(isModuleEnabled('automation'), false);
+    assert.equal(isModuleEnabled('inbox'), false);
     process.env.FF_SOCIAL_PUBLISHING = 'false';
     try {
       assert.equal(isModuleEnabled('socialPublishing'), false);

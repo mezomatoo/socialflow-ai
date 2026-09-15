@@ -81,6 +81,17 @@ export async function createContent(input: CreateContentInput) {
   });
 
   if (input.selections?.length) await syncSelections(content.id, input.workspaceId, input.selections);
+
+  // Otomasyon tetikleyicisi (§98): ateşle-unut; hata ana akışı bozmaz (§106).
+  const { dispatchTrigger } = await import('../automation/engine');
+  dispatchTrigger('ContentCreated', content.id, { workspaceId: input.workspaceId, userId: input.userId ?? null }, {
+    contentId: content.id,
+    brandId: content.brandId,
+    title: content.title ?? '',
+    status: content.status,
+    campaignId: content.campaignId
+  });
+
   return content;
 }
 
