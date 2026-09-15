@@ -1,4 +1,6 @@
 import { processInboxEvent } from '../inbox/service';
+import { executeWebhookDelivery } from '../webhooks/outbound';
+import { processInboundWebhook } from '../webhooks/incoming';
 import { claimNextJob, completeJob, failJob } from './queue';
 import { publishPlatformContent, rollupContentStatus } from '../social/publishingService';
 import prisma from '../prisma';
@@ -23,6 +25,12 @@ export async function processJob(job: any): Promise<Record<string, unknown> | vo
       if (!job.workspaceId || typeof payload.eventId !== 'string') throw new Error('Geçersiz gelen kutusu işi.');
       try { return await processInboxEvent(job.workspaceId, payload.eventId); }
       catch { throw new Error('Gelen kutusu olayı işlenemedi. Kaynak ve hesap yetkilerini kontrol edin.'); }
+    case 'OutboundWebhookJob':
+      if (typeof payload.deliveryId !== 'string') throw new Error('Geçersiz çıkış webhook işi: deliveryId eksik.');
+      return await executeWebhookDelivery(payload.deliveryId);
+    case 'InboundWebhookJob':
+      if (typeof payload.inboundEventId !== 'string') throw new Error('Geçersiz giriş webhook işi: inboundEventId eksik.');
+      return await processInboundWebhook(payload.inboundEventId);
     case 'PublishContentJob':
       return handlePublishContentJob(job, payload);
     case 'SyncPublicationStatusJob':
