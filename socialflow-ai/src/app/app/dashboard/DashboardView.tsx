@@ -11,7 +11,7 @@ import type { AssistantItem } from '@/lib/ai/dailyAssistant';
 import { CONTENT_TYPE_LABELS } from '@/lib/platforms/platforms';
 
 interface Props {
-  /** Faz 1 metrikleri — ana sayfanın omurgası. */
+  /** Ana sayfanın omurga metrikleri. */
   stats: Phase1Stats;
   /** Yayın modülü açıkken hesaplanan ek metrikler (aksi halde null). */
   publishingStats: DashboardStats | null;
@@ -21,7 +21,7 @@ interface Props {
   recentFailures: { id: string; contentId: string; platform: string; contentType: string; lastError: string | null; updatedAt: string }[];
   user: { name: string; workspaceName: string; timezone: string };
   demoMode: boolean;
-  /** Faz 4 — AI Günlük Asistan: öncelikli görevler ve akıllı uyarılar. */
+  /** AI Günlük Asistan: öncelikli görevler ve akıllı uyarılar. */
   assistant?: { greeting: string; items: AssistantItem[]; actionCenter: AssistantItem[] } | null;
 }
 
@@ -43,9 +43,9 @@ const PROVIDER_LABELS: Record<string, string> = {
 /**
  * Ana Sayfa görünümü (§24)
  * ---------------------------------------------------------------------------
- * Faz 1: üretim akışı ön planda (taslak → uyarlama → hazır). Yayınlama modülü
- * kapalıyken yayın metrikleri GÖSTERİLMEZ; bunun yerine modülün hangi fazda
- * geleceği dürüstçe yazılır.
+ * Üretim akışı ön plandadır (taslak → uyarlama → hazır). Yayınlama modülü
+ * kapalıyken yayın metrikleri GÖSTERİLMEZ; bunun yerine dürüst bir
+ * bilgilendirme yazılır.
  */
 export function DashboardView({ stats, publishingStats, onboarding, brands, accounts, recentFailures, user, demoMode, assistant }: Props) {
   const hour = new Date().getHours();
@@ -129,13 +129,13 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
         </div>
       </div>
 
-      {/* Faz durumu */}
+      {/* Yayın durumu */}
       {!stats.publishingEnabled && (
         <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-[12.5px] text-ink">
           <Icon name="info" size={16} className="text-info shrink-0" />
           <span>
-            <strong>Faz 1 — Üretim ve hazırlık.</strong> Sosyal medyaya gerçek yayın Faz 2’de etkinleşecek. Şu anda
-            içeriklerinizi hazırlayabilir, platforma özel metin ve görsellerini üretebilir, taslak olarak saklayabilirsiniz.
+            <strong>Yayın modülü bu kurulumda kapalı.</strong> Şu anda içeriklerinizi hazırlayabilir,
+            platforma özel metin ve görsellerini üretebilir, taslak olarak saklayabilirsiniz.
           </span>
         </div>
       )}
@@ -174,7 +174,7 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
         </section>
       )}
 
-      {/* Faz 1 özet kartları */}
+      {/* Özet kartları */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map((c) => (
           <Link key={c.label} href={c.href} className="card card-pad card-hover group block">
@@ -193,7 +193,7 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
         ))}
       </div>
 
-      {/* AI Günlük Asistan (Faz 4 entegrasyonu) */}
+      {/* AI Günlük Asistan */}
       {assistant && assistant.items.length > 0 && (
         <section className="card mt-5">
           <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">

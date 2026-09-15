@@ -98,7 +98,7 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Bildirimler Faz 3 modülüdür; kapalıyken API çağrılmaz ve zil gösterilmez.
+  // Bildirimler modülü kapalıyken API çağrılmaz ve zil gösterilmez.
   const notificationsEnabled = modules?.notifications?.enabled ?? false;
 
   const openNotifications = async () => {

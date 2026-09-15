@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Marka detayı (§17)
  * ---------------------------------------------------------------------------
- * Marka profili ve MARKA SESİ Faz 1'in çekirdeğidir: üretilen her metin bu
+ * Marka profili ve MARKA SESİ üretilen her metnin temelidir:
  * kurallara göre şekillenir (ton, yasaklı/zorunlu terimler, zorunlu hashtag).
  * Bu ekran, içerik üretiminde gerçekten kullanılan kuralları görünür kılar ve
  * markanın içerik/medya varlıklarını özetler. Düzenleme, Markalar listesindeki
@@ -217,7 +217,7 @@ export default async function BrandDetailPage({ params }: { params: { id: string
               </li>
               <li className="flex items-center justify-between px-5 py-2.5">
                 <span className="text-[12.5px] text-ink-muted">
-                  Sosyal hesaplar{!accountsEnabled && <span className="text-ink-faint"> · Faz 2</span>}
+                  Sosyal hesaplar{!accountsEnabled && <span className="text-ink-faint"> · Bağlama kapalı</span>}
                 </span>
                 <span className="text-[13px] font-bold text-ink">{brand._count.socialAccounts}</span>
               </li>

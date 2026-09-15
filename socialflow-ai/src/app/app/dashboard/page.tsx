@@ -13,7 +13,7 @@ export const metadata = { title: 'Ana Sayfa' };
 /**
  * Ana Sayfa (§24)
  * ---------------------------------------------------------------------------
- * Faz 1'de yayın/analitik modülleri kapalıdır; ana sayfa ÜRETİM akışını
+ * Yayın/analitik modülleri kapalıysa ana sayfa ÜRETİM akışını
  * gösterir (taslaklar, hazır içerikler, medya, markalar, platform dağılımı).
  * Yayın metrikleri yalnızca ilgili modül açıkken hesaplanır ve gösterilir —
  * aksi halde çalışmayan bir modülün sayıları kullanıcıya sunulmaz.

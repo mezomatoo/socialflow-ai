@@ -115,12 +115,12 @@ interface PreflightTarget {
 }
 interface Preflight {
   readyCount: number;
-  /** İçerik (platform kuralları) açısından hazır hedef sayısı — Faz 1 ölçütü. */
+  /** İçerik (platform kuralları) açısından hazır hedef sayısı. */
   contentReadyCount?: number;
   totalCount: number;
   headline: string;
   blocking: boolean;
-  /** Faz 2'de yayın için bekleyen hedef sayısı (ör. hesap bağlama). */
+  /** Yayın için henüz bekleyen hedef sayısı (ör. hesap bağlama). */
   publishingPending?: number;
   phase1Mode?: boolean;
   targets: PreflightTarget[];
@@ -161,7 +161,7 @@ export function ComposerView({
   role: string;
   modules?: Record<string, { enabled: boolean; phase: number; label: string; notice: string }>;
 }) {
-  // Faz kapıları (§3): Faz 2+ modülleri çalışıyormuş gibi GÖSTERİLMEZ.
+  // Modül kapıları: kapalı modüller çalışıyormuş gibi GÖSTERİLMEZ.
   const publishingEnabled = modules?.socialPublishing?.enabled ?? false;
   const schedulingEnabled = modules?.scheduling?.enabled ?? false;
   const accountsEnabled = modules?.socialAccounts?.enabled ?? false;
@@ -544,9 +544,8 @@ export function ComposerView({
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-2.5 text-[12.5px] text-ink">
           <Icon name="info" size={15} className="text-info" />
           <span>
-            <strong>Faz 1 — </strong>
             {modules?.socialPublishing?.notice ??
-              'Gerçek sosyal medya yayını Faz 2’de etkinleşecek. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
+              'Yayın modülü bu kurulumda kapalı. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
           </span>
         </div>
       )}
@@ -584,7 +583,7 @@ export function ComposerView({
             {preflight.headline}
             {preflight.phase1Mode && (preflight.publishingPending ?? 0) > 0 && (
               <span className="ml-1 text-ink-muted">
-                · Yayın koşulları ({preflight.publishingPending}) Faz 2’de etkinleşecek.
+                · Yayın için gereken {preflight.publishingPending} koşul henüz sağlanmadı.
               </span>
             )}
           </p>
@@ -1062,7 +1061,7 @@ function SelectionModal({
       <div className="space-y-3">
         {!accountsEnabled && (
           <p className="rounded-xl border border-info/30 bg-info/10 px-3 py-2 text-[12.5px] text-ink">
-            Hesap bağlama Faz 2’de etkinleşecek. Faz 1’de hedefleri hesap
+            Hesap bağlama bu kurulumda kapalı. Hedefleri hesap
             seçmeden de hazırlayabilirsiniz.
           </p>
         )}
@@ -1072,7 +1071,7 @@ function SelectionModal({
               <PlatformIcon platform={p.code} size={22} rounded="md" />
               <span className="text-[13.5px] font-bold text-ink">{p.name}</span>
               {!accounts.some((a) => a.platform === p.code) && (
-                <Badge tone="warning">{accountsEnabled ? 'Bağlı hesap yok' : 'Hesap bağlama Faz 2’de'}</Badge>
+                <Badge tone="warning">{accountsEnabled ? 'Bağlı hesap yok' : 'Hesap bağlama kapalı'}</Badge>
               )}
             </div>
             <div className="flex flex-wrap gap-2">

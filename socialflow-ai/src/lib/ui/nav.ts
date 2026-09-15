@@ -1,12 +1,11 @@
 /**
- * Sol menü yapısı — tamamı Türkçe (§22).
+ * Sol menü yapısı — tamamı Türkçe.
  * ---------------------------------------------------------------------------
- * Entegre menü: Faz 1 çekirdeği (474), Gelen Kutusu + Reklamlar (3eb) ve
- * AI modülleri (0d6) tek yapıda birleştirilir. Henüz çalışmayan bir modül
- * çalışıyormuş gibi gösterilmez (§22); kapı kararları phaseGates.ts'tedir.
+ * İşlevsel kategoriler: geliştirme fazı adları müşteri arayüzüne yansıtılmaz;
+ * her modül gerçek işlevine göre kategorize edilir. Henüz çalışmayan bir modül
+ * çalışıyormuş gibi gösterilmez; kapı kararları phaseGates.ts'tedir.
+ * Tüm yollar korunur (yer imleri bozulmaz); yalnızca gruplama değişir.
  */
-
-export type NavPhase = 'phase1' | 'phase2';
 
 export interface NavItem {
   href: string;
@@ -14,112 +13,115 @@ export interface NavItem {
   icon: string;
   badge?: 'drafts' | 'scheduled' | 'notifications';
   group: string;
-  /** Modülün hangi faza ait olduğu (menüde etiketlenir). */
-  phase: NavPhase;
   /** Kısa açıklama (başlık ipucu / aria-label). */
   description?: string;
 }
 
-export const NAV_GROUPS: { id: string; label: string; phase: NavPhase; items: NavItem[] }[] = [
+export interface NavGroup {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
   {
-    id: 'phase1',
-    label: 'Çalışma Alanı',
-    phase: 'phase1',
+    id: 'content',
+    label: 'İçerik',
     items: [
-      { href: '/app/dashboard', label: 'Ana Sayfa', icon: 'home', group: 'phase1', phase: 'phase1' },
-      { href: '/app/icerik/yeni', label: 'Yeni İçerik', icon: 'plus', group: 'phase1', phase: 'phase1' },
+      { href: '/app/dashboard', label: 'Ana Sayfa', icon: 'home', group: 'content' },
+      { href: '/app/icerik/yeni', label: 'Yeni İçerik', icon: 'plus', group: 'content' },
       {
         href: '/app/icerik/taslaklar',
         label: 'Taslaklar',
         icon: 'draft',
         badge: 'drafts',
-        group: 'phase1',
-        phase: 'phase1'
+        group: 'content'
       },
-      { href: '/app/medya', label: 'Medya Kütüphanesi', icon: 'image', group: 'phase1', phase: 'phase1' },
-      { href: '/app/markalar', label: 'Markalar', icon: 'brand', group: 'phase1', phase: 'phase1' },
-      { href: '/app/ayarlar', label: 'Ayarlar', icon: 'settings', group: 'phase1', phase: 'phase1' }
-    ]
-  },
-  {
-    id: 'phase2',
-    label: 'Sonraki Faz Modülleri',
-    phase: 'phase2',
-    items: [
-      { href: '/app/takvim', label: 'İçerik Takvimi', icon: 'calendar', group: 'phase2', phase: 'phase2' },
       {
         href: '/app/icerik/planlananlar',
         label: 'Planlananlar',
         icon: 'clock',
         badge: 'scheduled',
-        group: 'phase2',
-        phase: 'phase2'
+        group: 'content'
       },
-      { href: '/app/icerik/yayinlananlar', label: 'Yayınlananlar', icon: 'check-circle', group: 'phase2', phase: 'phase2' },
-      { href: '/app/hesaplar', label: 'Sosyal Medya Hesapları', icon: 'users', group: 'phase2', phase: 'phase2' },
-      { href: '/app/analizler', label: 'Analizler', icon: 'chart', group: 'phase2', phase: 'phase2' },
-      { href: '/app/marka-kiti', label: 'Marka Kiti', icon: 'layers', group: 'phase2', phase: 'phase2' },
-      {
-        href: '/app/bildirimler',
-        label: 'Bildirimler',
-        icon: 'bell',
-        badge: 'notifications',
-        group: 'phase2',
-        phase: 'phase2'
-      }
+      { href: '/app/icerik/yayinlananlar', label: 'Yayınlananlar', icon: 'check-circle', group: 'content' },
+      { href: '/app/takvim', label: 'İçerik Takvimi', icon: 'calendar', group: 'content' }
     ]
   },
   {
-    id: 'community',
-    label: 'Topluluk',
-    phase: 'phase2',
-    items: [{ href: '/app/gelen-kutusu', label: 'Gelen Kutusu', icon: 'inbox', group: 'community', phase: 'phase2' }]
-  },
-  {
-    id: 'advertising',
-    label: 'Reklamlar',
-    phase: 'phase2',
+    id: 'brand',
+    label: 'Marka Yönetimi',
     items: [
-      { href: '/app/reklamlar', label: 'Reklam Özeti', icon: 'chart', group: 'advertising', phase: 'phase2' },
-      { href: '/app/reklamlar/hesaplar', label: 'Reklam Hesapları', icon: 'users', group: 'advertising', phase: 'phase2' }
+      { href: '/app/markalar', label: 'Markalar', icon: 'brand', group: 'brand' },
+      { href: '/app/marka-kiti', label: 'Marka Kiti', icon: 'layers', group: 'brand' }
     ]
   },
   {
     id: 'ai',
-    label: 'Yapay Zeka',
-    phase: 'phase2',
+    label: 'AI & Kreatif',
     items: [
-      { href: '/app/ai-asistan', label: 'AI İçerik Asistanı', icon: 'sparkles', group: 'ai', phase: 'phase2' },
-      { href: '/app/ai-studio', label: 'AI Kreatif Stüdyo', icon: 'shapes', group: 'ai', phase: 'phase2' },
-      { href: '/app/ai-planlayici', label: 'AI İçerik Planlayıcı', icon: 'calendar', group: 'ai', phase: 'phase2' },
-      { href: '/app/ai-kampanya', label: 'AI Kampanya Oluşturucu', icon: 'target', group: 'ai', phase: 'phase2' },
-      { href: '/app/ai-gecmisi', label: 'AI Geçmişi', icon: 'history', group: 'ai', phase: 'phase2' }
+      { href: '/app/ai-asistan', label: 'AI İçerik Asistanı', icon: 'sparkles', group: 'ai' },
+      { href: '/app/ai-studio', label: 'AI Stüdyo', icon: 'shapes', group: 'ai' },
+      { href: '/app/ai-planlayici', label: 'AI Planlayıcı', icon: 'calendar', group: 'ai' },
+      { href: '/app/ai-kampanya', label: 'AI Kampanya Oluşturucu', icon: 'target', group: 'ai' },
+      { href: '/app/ai-gecmisi', label: 'AI Geçmişi', icon: 'history', group: 'ai' }
     ]
   },
   {
     id: 'automation',
     label: 'Otomasyon ve İçgörü',
-    phase: 'phase2',
     items: [
-      { href: '/app/otomasyonlar', label: 'Otomasyonlar', icon: 'magic', group: 'automation', phase: 'phase2' },
-      { href: '/app/trendler', label: 'Trendler', icon: 'chart', group: 'automation', phase: 'phase2' },
-      { href: '/app/rakip-analizi', label: 'Rakip Analizi', icon: 'users', group: 'automation', phase: 'phase2' }
+      { href: '/app/otomasyonlar', label: 'Otomasyonlar', icon: 'magic', group: 'automation' },
+      { href: '/app/trendler', label: 'Trendler', icon: 'chart', group: 'automation' },
+      { href: '/app/rakip-analizi', label: 'Rakip Analizi', icon: 'users', group: 'automation' }
     ]
   },
   {
-    id: 'insights',
-    label: 'Sistem',
-    phase: 'phase2',
+    id: 'media',
+    label: 'Medya',
+    items: [{ href: '/app/medya', label: 'Medya Kütüphanesi', icon: 'image', group: 'media' }]
+  },
+  {
+    id: 'accounts',
+    label: 'Hesaplar',
+    items: [{ href: '/app/hesaplar', label: 'Sosyal Medya Hesapları', icon: 'users', group: 'accounts' }]
+  },
+  {
+    id: 'performance',
+    label: 'Performans',
+    items: [{ href: '/app/analizler', label: 'Analizler', icon: 'chart', group: 'performance' }]
+  },
+  {
+    id: 'community',
+    label: 'Topluluk',
+    items: [{ href: '/app/gelen-kutusu', label: 'Gelen Kutusu', icon: 'inbox', group: 'community' }]
+  },
+  {
+    id: 'advertising',
+    label: 'Reklamlar',
     items: [
-      { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'insights', phase: 'phase2' }
+      { href: '/app/reklamlar', label: 'Reklam Özeti', icon: 'chart', group: 'advertising' },
+      { href: '/app/reklamlar/hesaplar', label: 'Reklam Hesapları', icon: 'users', group: 'advertising' }
+    ]
+  },
+  {
+    id: 'system',
+    label: 'Sistem',
+    items: [
+      {
+        href: '/app/bildirimler',
+        label: 'Bildirimler',
+        icon: 'bell',
+        badge: 'notifications',
+        group: 'system'
+      },
+      { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'system' },
+      { href: '/app/ayarlar', label: 'Ayarlar', icon: 'settings', group: 'system' }
     ]
   }
 ];
 
 export const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
-
-/** Phase 1 ana menü öğeleri (doğrulama/testlerde kullanılır). */
-export const PHASE1_NAV_ITEMS = ALL_NAV_ITEMS.filter((i) => i.phase === 'phase1');
 
 export function navLabelFor(pathname: string): string {
   const exact = ALL_NAV_ITEMS.find((i) => i.href === pathname);
