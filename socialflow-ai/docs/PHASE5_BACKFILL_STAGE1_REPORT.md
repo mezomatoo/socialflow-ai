@@ -1,3 +1,5 @@
+> **GÜNCEL DURUM:** Bu belge tarihsel teslim kaydıdır. Ürün Kataloğu ve CRM/Lead modülleri kullanıcı talebiyle kaldırılmıştır. Güncel durum: [kaldırma raporu](CATALOG_CRM_REMOVAL.md). Aşağıdaki kullanım yolları artık geçerli değildir.
+
 # Faz 5 eksiklerinin tamamlanması — ara teslim 1
 
 15 Eylül 2026. Kullanıcının düzeltmesi üzerine yeni Phase 6 sağlayıcı çalışmalarına ara verildi. İstenen dört eksikten **ürün kataloğu ve CRM/Lead temel iş akışları** eklendi. **Ajans portalı ve genel otomasyon motoru henüz uygulanmadı; istek bütünüyle tamamlanmış değildir.** Eski audit belgeleri kendi tarihlerindeki durumu gösterir; bu rapor güncel eklemedir.

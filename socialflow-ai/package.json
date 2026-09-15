@@ -21,8 +21,7 @@
     "test:accounts": "DATABASE_URL=\"file:./test.db\" DEMO_MODE=false tsx --test tests/account-registration.test.ts",
     "test:advertising:contracts": "tsx --test tests/advertising-contracts.test.ts",
     "test:advertising": "DATABASE_URL=\"file:./test.db\" tsx --test tests/advertising-contracts.test.ts tests/advertising-service.test.ts",
-    "test:catalog": "DATABASE_URL=\"file:./test.db\" tsx --test tests/catalog.test.ts",
-    "test:crm": "DATABASE_URL=\"file:./test.db\" tsx --test tests/crm.test.ts"
+    "test:removed-modules": "tsx --test tests/removed-modules.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

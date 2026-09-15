@@ -22,7 +22,6 @@ export type InboxSummary = {
   messages: { text: string; direction: string }[]; _count: { messages: number };
 };
 export type InboxDetail = Omit<InboxSummary, 'messages'> & {
-  crmContactId: string | null;
   messages: { id: string; text: string; direction: string; sender: string; sentAt: string; isRead: boolean }[];
   assignments: { id: string; assignedTo: string | null; createdAt: string; actor: { name: string } }[];
 };
