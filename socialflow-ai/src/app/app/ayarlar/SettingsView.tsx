@@ -65,7 +65,12 @@ export function SettingsView({
   integrations: IntegrationRow[];
 }) {
   const canEdit = role === 'OWNER' || role === 'ADMIN';
-  const [tab, setTab] = useState('genel');
+  // ?tab=entegrasyonlar gibi derin bağlantıları destekle (hesaplar sayfasından yönlendirme).
+  const [tab, setTab] = useState(() => {
+    if (typeof window === 'undefined') return 'genel';
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    return ['genel', 'ai', 'entegrasyonlar', 'kurallar', 'calisma-alani'].includes(requested ?? '') ? (requested as string) : 'genel';
+  });
 
   const tabs = [
     { id: 'genel', label: 'Genel', icon: <Icon name="settings" size={15} /> },
@@ -618,58 +623,139 @@ function AiTab({ canEdit }: { settings: any; canEdit: boolean }) {
 }
 
 /* ------------------------------------------------------- Entegrasyonlar */
-/** Platform kimliği nasıl alınır — kısa Türkçe rehber. */
-const CREDENTIAL_GUIDE: Record<string, { idLabel: string; secretLabel: string; guide: string }> = {
+/** Platform kimliği nasıl alınır — adım adım Türkçe rehber. */
+const CREDENTIAL_GUIDE: Record<
+  string,
+  { idLabel: string; secretLabel: string; intro: string; portalLabel: string; createUrl: string; steps: string[] }
+> = {
   INSTAGRAM: {
     idLabel: 'App ID',
     secretLabel: 'App Secret',
-    guide:
-      'developers.facebook.com → Uygulamalar → yeni uygulama oluşturun ve "Instagram Graph API" ürününü ekleyin. Instagram Business/Creator hesabınız bir Facebook Sayfasına bağlı olmalıdır.'
+    intro:
+      'Instagram, Meta (Facebook) altyapısını kullanır. Bir kez yapacağınız bu ayardan sonra ekibiniz hesapları tek tıkla bağlar.',
+    portalLabel: 'Meta Geliştirici Portalını Aç',
+    createUrl: 'https://developers.facebook.com/apps/create/',
+    steps: [
+      '“Meta Geliştirici Portalını Aç” düğmesine tıklayın ve kişisel Facebook hesabınızla giriş yapın.',
+      '“Uygulama oluştur” deyin ve tür olarak “İşletme” (Business) seçin.',
+      'Uygulamaya “Instagram Graph API” ürününü ekleyin.',
+      'Ayarlar → Temel bölümündeki App ID ve App Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini uygulamanızın izinli yönlendirme adreslerine ekleyin.',
+      'Not: Instagram hesabınız “İşletme” veya “Creator” türünde olmalı ve bir Facebook Sayfasına bağlanmalıdır.'
+    ]
   },
   FACEBOOK: {
     idLabel: 'App ID',
     secretLabel: 'App Secret',
-    guide: 'developers.facebook.com üzerinden uygulama oluşturun; Facebook Login ve Graph API ürünlerini ekleyin.'
+    intro: 'Facebook sayfalarınıza yayınlamak için Meta uygulaması gerekir. Ayarlar Instagram ile aynı portalda yapılır.',
+    portalLabel: 'Meta Geliştirici Portalını Aç',
+    createUrl: 'https://developers.facebook.com/apps/create/',
+    steps: [
+      '“Meta Geliştirici Portalını Aç” düğmesine tıklayın ve Facebook hesabınızla giriş yapın.',
+      '“Uygulama oluştur” deyin ve tür olarak “İşletme” seçin.',
+      '“Facebook Login for Business” ve “Graph API” ürünlerini ekleyin.',
+      'Ayarlar → Temel bölümündeki App ID ve App Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini izinli yönlendirme adreslerine ekleyin.'
+    ]
   },
   X: {
     idLabel: 'Client ID',
     secretLabel: 'Client Secret',
-    guide:
-      'developer.x.com portalında bir Project ve App oluşturun (ücretli plan gerekebilir); OAuth 2.0 kullanıcı yetkilendirmesini etkinleştirin.'
+    intro: 'X (Twitter) yayınlama için developer.x.com üzerinde bir uygulama gerekir. Ücretli geliştirici planı gerekebilir.',
+    portalLabel: 'X Geliştirici Portalını Aç',
+    createUrl: 'https://developer.x.com/en/portal/dashboard',
+    steps: [
+      '“X Geliştirici Portalını Aç” düğmesine tıklayın ve X hesabınızla giriş yapın.',
+      'Bir Project ve App oluşturun (Dashboard üzerinden).',
+      '“Keys and tokens” bölümünden OAuth 2.0 Client ID ve Client Secret oluşturun.',
+      'Kopyaladığınız değerleri aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini uygulamanızın redirect URI listesine ekleyin.'
+    ]
   },
   LINKEDIN: {
     idLabel: 'Client ID',
     secretLabel: 'Client Secret',
-    guide: 'linkedin.com/developers sayfasından uygulama oluşturun ve "Share on LinkedIn" ürününü etkinleştirin.'
+    intro: 'LinkedIn, ücretsiz geliştirici uygulamasıyla bağlantıyı destekler.',
+    portalLabel: 'LinkedIn Geliştirici Portalını Aç',
+    createUrl: 'https://www.linkedin.com/developers/apps/new',
+    steps: [
+      '“LinkedIn Geliştirici Portalını Aç” düğmesine tıklayın ve LinkedIn hesabınızla giriş yapın.',
+      '“Uygulama oluştur” deyin ve bir şirket sayfası seçin (yoksa önce ücretsiz bir sayfa oluşturun).',
+      '“Ürünler” sekmesinden “Share on LinkedIn” ürününü etkinleştirin.',
+      'Auth sekmesindeki Client ID ve Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aynı sekmedeki “OAuth 2.0 settings” bölümüne aşağıdaki callback adresini ekleyin.'
+    ]
   },
   TIKTOK: {
     idLabel: 'Client Key',
     secretLabel: 'Client Secret',
-    guide:
-      'developers.tiktok.com üzerinden uygulama kaydedin ve "Content Posting API" erişimi isteyin (inceleme/onay süreci vardır).'
+    intro: 'TikTok yayınlama için “Content Posting API” erişimi gerekir; TikTok’un onay süreci birkaç gün sürebilir.',
+    portalLabel: 'TikTok Geliştirici Portalını Aç',
+    createUrl: 'https://developers.tiktok.com/apps/',
+    steps: [
+      '“TikTok Geliştirici Portalını Aç” düğmesine tıklayın ve kayıt olun.',
+      'Yeni bir uygulama kaydedin.',
+      '“Content Posting API” ürünü için erişim isteyin (inceleme/onay süreci vardır).',
+      'Client Key ve Client Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini uygulamanızın redirect adreslerine ekleyin.'
+    ]
   },
   YOUTUBE: {
     idLabel: 'Client ID',
     secretLabel: 'Client Secret',
-    guide:
-      'console.cloud.google.com → "OAuth istemci kimliği" (Web uygulaması) oluşturun ve "YouTube Data API v3"ü etkinleştirin.'
+    intro: 'YouTube, Google Cloud üzerinden ücretsiz bir OAuth istemcisiyle bağlanır.',
+    portalLabel: 'Google Cloud Console’u Aç',
+    createUrl: 'https://console.cloud.google.com/apis/credentials',
+    steps: [
+      '“Google Cloud Console’u Aç” düğmesine tıklayın ve Google hesabınızla giriş yapın.',
+      'Bir proje oluşturun (veya mevcut projeyi seçin).',
+      '“API’ler ve Hizmetler” bölümünden “YouTube Data API v3”ü etkinleştirin.',
+      '“OAuth onay ekranı”nı doldurun, ardından “OAuth istemci kimliği oluştur” → “Web uygulaması” seçin.',
+      'Oluşan Client ID ve Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'İstemcinin yönlendirme URI listesine aşağıdaki callback adresini ekleyin.'
+    ]
   },
   THREADS: {
     idLabel: 'App ID',
     secretLabel: 'App Secret',
-    guide: 'developers.facebook.com üzerinden uygulama oluşturun ve "Threads API" ürününü ekleyin.'
+    intro: 'Threads de Meta altyapısını kullanır; aynı portalda birkaç dakikada kurulur.',
+    portalLabel: 'Meta Geliştirici Portalını Aç',
+    createUrl: 'https://developers.facebook.com/apps/create/',
+    steps: [
+      '“Meta Geliştirici Portalını Aç” düğmesine tıklayın ve Facebook hesabınızla giriş yapın.',
+      '“Uygulama oluştur” deyin ve tür olarak “İşletme” seçin.',
+      'Uygulamaya “Threads API” ürününü ekleyin.',
+      'Ayarlar → Temel bölümündeki App ID ve App Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini izinli yönlendirme adreslerine ekleyin.'
+    ]
   },
   PINTEREST: {
     idLabel: 'App ID',
     secretLabel: 'App Secret',
-    guide:
-      'developers.pinterest.com üzerinden uygulama oluşturun; OAuth yönlendirme adresine bu kurulumun adresini ekleyin.'
+    intro: 'Pinterest, ücretsiz geliştirici uygulamasıyla bağlanır.',
+    portalLabel: 'Pinterest Geliştirici Portalını Aç',
+    createUrl: 'https://developers.pinterest.com/apps/',
+    steps: [
+      '“Pinterest Geliştirici Portalını Aç” düğmesine tıklayın ve Pinterest hesabınızla giriş yapın.',
+      'Yeni bir uygulama oluşturun.',
+      'App ID ve App Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'Aşağıdaki callback adresini uygulamanızın yönlendirme adreslerine ekleyin.'
+    ]
   },
   GOOGLE_BUSINESS: {
     idLabel: 'Client ID',
     secretLabel: 'Client Secret',
-    guide:
-      'console.cloud.google.com → "OAuth istemci kimliği" oluşturun ve "Google Business Profile API"yi etkinleştirin.'
+    intro: 'Google İş Profili yayınlaması için Google Cloud üzerinde OAuth istemcisi gerekir.',
+    portalLabel: 'Google Cloud Console’u Aç',
+    createUrl: 'https://console.cloud.google.com/apis/credentials',
+    steps: [
+      '“Google Cloud Console’u Aç” düğmesine tıklayın ve Google hesabınızla giriş yapın.',
+      'Bir proje oluşturun (veya mevcut projeyi seçin).',
+      '“Google Business Profile API”yi etkinleştirin.',
+      '“OAuth istemci kimliği oluştur” → “Web uygulaması” seçin.',
+      'Oluşan Client ID ve Secret değerlerini kopyalayıp aşağıya yapıştırın.',
+      'İstemcinin yönlendirme URI listesine aşağıdaki callback adresini ekleyin.'
+    ]
   }
 };
 
@@ -741,15 +827,38 @@ function IntegrationsTab({ demoMode, canEdit }: { integrations: IntegrationRow[]
       ? `${window.location.origin}/api/auth/${modal.platform.toLowerCase()}/callback`
       : '';
 
+  async function copyCallback() {
+    try {
+      await navigator.clipboard.writeText(callbackUrl);
+      toast.success('Kopyalandı', 'Callback adresi panoya kopyalandı.');
+    } catch {
+      toast.error('Kopyalanamadı', 'Adresi elle seçip kopyalayabilirsiniz.');
+    }
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex items-start gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-[12.5px] text-ink">
-        <Icon name="key" size={16} className="mt-0.5 shrink-0 text-info" />
-        <p>
-          Her platform için kendi API uygulamanızın kimliklerini girin; secret <strong>AES-256 ile şifrelenerek</strong>{' '}
-          saklanır ve bir daha asla gösterilmez. Kimlik tanımlanınca o platformda gerçek OAuth bağlantısı ve gerçek
-          yayınlama açılır. Kimlik girilmezse platform simülasyon olarak çalışmaya devam eder.
+      <div className="card card-pad space-y-2">
+        <p className="text-[13.5px] font-bold text-ink">Bu bölüm ne işe yarar?</p>
+        <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          Burası <strong className="text-ink">yönetici için tek seferlik ayardır</strong>: SocialFlow’un platformların
+          resmî API’lerine erişebilmesi için uygulamanızın kimliklerini tanımlarsınız. Kimlik tanımlandıktan sonra
+          herkes <strong className="text-ink">Sosyal Medya Hesapları sayfasından tek tıkla</strong> hesap bağlar —
+          geliştirici bilgisi gerekmez. Kimlik girilmezse sistem simülasyon olarak çalışmaya devam eder.
         </p>
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-[12px] text-ink-faint">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-subtle px-2.5 py-1">
+            <strong className="text-ink">1.</strong> Portalı aç, uygulama oluştur
+          </span>
+          <Icon name="arrow-right" size={12} />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-subtle px-2.5 py-1">
+            <strong className="text-ink">2.</strong> Kimlikleri buraya yapıştır
+          </span>
+          <Icon name="arrow-right" size={12} />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-subtle px-2.5 py-1">
+            <strong className="text-ink">3.</strong> Hesaplar sayfasından hesabını bağla
+          </span>
+        </div>
       </div>
 
       {!items ? (
@@ -820,68 +929,114 @@ function IntegrationsTab({ demoMode, canEdit }: { integrations: IntegrationRow[]
         </ul>
       )}
 
-      {/* Kimlik girme modalı */}
+      <div className="card card-pad space-y-2">
+        <p className="text-[13px] font-bold text-ink">“Sosyal Medya Hesapları” sayfasından farkı ne?</p>
+        <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          Mükerrer işlem yapmıyorsunuz; ikisi farklı katmanlar. <strong className="text-ink">Bu sayfa</strong>{' '}
+          (Entegrasyonlar) uygulamanın kendisini platformlara tanıtır — bir kez yapılır ve genelde yönetici yapar.{' '}
+          <strong className="text-ink">Sosyal Medya Hesapları sayfası</strong> ise sizin kendi hesabınızı bağladığınız
+          yerdir; kimlik tanımlıysa oradaki “Hesap Bağla” düğmesi doğrudan platformun giriş/onay ekranını açar.
+        </p>
+        <a href="/app/hesaplar" className="link inline-flex items-center gap-1 text-[12.5px]">
+          <Icon name="arrow-right" size={13} /> Hesap bağlamaya git
+        </a>
+      </div>
+
+      {/* Kimlik girme modalı — adım adım rehberli */}
       {modal && guide && (
         <Modal
           open
           onClose={() => setModal(null)}
-          title={`${modal.name} API Kimlikleri`}
+          title={`${modal.name} Bağlantı Kurulumu`}
           footer={
             <div className="flex justify-end gap-2">
               <button className="btn-secondary btn-md" onClick={() => setModal(null)}>
                 Vazgeç
               </button>
               <button className="btn-primary btn-md" onClick={saveCredentials} disabled={saving || !clientId.trim() || !clientSecret.trim()}>
-                {saving ? 'Kaydediliyor…' : 'Kimlikleri Kaydet'}
+                {saving ? 'Kaydediliyor…' : 'Kurulumu Tamamla'}
               </button>
             </div>
           }
         >
           <div className="space-y-4">
-            <p className="rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink">
-              {guide.guide}
-            </p>
-            <div>
-              <label className="label">{guide.idLabel}</label>
-              <input
-                className="input font-mono"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder={guide.idLabel}
-                autoComplete="off"
-                spellCheck={false}
-              />
+            <p className="text-[12.5px] leading-relaxed text-ink-muted">{guide.intro}</p>
+
+            <div className="rounded-xl border border-line bg-surface-subtle p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[13px] font-bold text-ink">
+                  <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[11px] font-bold text-white">1</span>
+                  Portaldan kimlik alın
+                </p>
+                <a href={guide.createUrl} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
+                  <Icon name="globe" size={13} /> {guide.portalLabel}
+                </a>
+              </div>
+              <ol className="mt-2.5 space-y-1.5 pl-1">
+                {guide.steps.map((step, i) => (
+                  <li key={i} className="flex gap-2 text-[12px] leading-relaxed text-ink-muted">
+                    <span className="mt-0.5 shrink-0 font-mono text-[11px] font-bold text-brand-600">{i + 1}.</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
-            <div>
-              <label className="label">{guide.secretLabel}</label>
-              <div className="relative">
-                <input
-                  className="input pr-10 font-mono"
-                  type={showSecret ? 'text' : 'password'}
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  placeholder={guide.secretLabel}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
-                  onClick={() => setShowSecret((v) => !v)}
-                  aria-label={showSecret ? 'Gizle' : 'Göster'}
-                >
-                  <Icon name={showSecret ? 'eye-off' : 'eye'} size={16} />
-                </button>
+
+            <div className="rounded-xl border border-line bg-surface-subtle p-3.5">
+              <p className="mb-2.5 text-[13px] font-bold text-ink">
+                <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[11px] font-bold text-white">2</span>
+                Kimlikleri yapıştırın
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="label">{guide.idLabel}</label>
+                  <input
+                    className="input font-mono"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder={guide.idLabel}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                <div>
+                  <label className="label">{guide.secretLabel}</label>
+                  <div className="relative">
+                    <input
+                      className="input pr-10 font-mono"
+                      type={showSecret ? 'text' : 'password'}
+                      value={clientSecret}
+                      onChange={(e) => setClientSecret(e.target.value)}
+                      placeholder={guide.secretLabel}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                      onClick={() => setShowSecret((v) => !v)}
+                      aria-label={showSecret ? 'Gizle' : 'Göster'}
+                    >
+                      <Icon name={showSecret ? 'eye-off' : 'eye'} size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Callback adresi (portaldaki yönlendirme listesine ekleyin)</label>
+                  <div className="flex gap-2">
+                    <input className="input font-mono" readOnly value={callbackUrl} onFocus={(e) => e.currentTarget.select()} />
+                    <button className="btn-secondary btn-md shrink-0" onClick={copyCallback} title="Kopyala">
+                      <Icon name="copy" size={14} /> Kopyala
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="rounded-lg border border-line bg-surface-subtle px-3 py-2.5">
-              <p className="text-[11.5px] font-bold uppercase tracking-wide text-ink-faint">OAuth yönlendirme (callback) adresi</p>
-              <p className="mt-1 break-all font-mono text-[12px] text-ink">{callbackUrl}</p>
-              <p className="mt-1 text-[11.5px] text-ink-faint">Bu adresi API uygulamanızın izinli yönlendirme adreslerine ekleyin.</p>
-            </div>
+
             <p className="flex items-start gap-1.5 text-[11.5px] text-ink-faint">
               <Icon name="shield" size={13} className="mt-0.5 shrink-0" />
-              Secret yalnızca şifreli olarak saklanır; kaydedildikten sonra tekrar görüntülenmez.
+              Secret yalnızca AES-256 ile şifreli olarak saklanır; kaydedildikten sonra tekrar görüntülenmez. Kurulum
+              bitince ekibiniz Sosyal Medya Hesapları sayfasından tek tıkla hesap bağlayabilir.
             </p>
           </div>
         </Modal>
