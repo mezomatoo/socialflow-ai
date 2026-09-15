@@ -73,6 +73,8 @@ describe('Hesap sağlığı (Faz 2 §27-§29)', () => {
 
   it('günlük bakım işleri idempotencyKey ile günde bir kez oluşur', async () => {
     const today = new Date().toISOString().slice(0, 10);
+    // Önceki test koşularının aynı güne ait işlerini temizle (test.db kalıcı).
+    await prisma.job.deleteMany({ where: { idempotencyKey: { in: [`health:daily:${today}`, `tokenrefresh:daily:${today}`] } } });
     const a = await enqueue({ type: 'CheckSocialAccountHealthJob', idempotencyKey: `health:daily:${today}`, payload: {} });
     const b = await enqueue({ type: 'CheckSocialAccountHealthJob', idempotencyKey: `health:daily:${today}`, payload: {} });
     assert.equal(a.created, true);

@@ -86,6 +86,21 @@ describe('Kısmi başarısızlık: PARTIALLY_PUBLISHED + yalnızca başarısız 
     assert.equal(pubs.length, 3);
     assert.equal(pubs.filter((p) => p.status === 'PUBLISHED').length, 2);
     assert.equal(pubs.filter((p) => p.status === 'FAILED').length, 1);
+
+    // §56: kısmi başarı içerik-bazlı PUBLICATION_PARTIAL_SUCCESS bildirimi (bir kez).
+    const partialNotifs = await prisma.notification.findMany({
+      where: { workspaceId: ctx.workspaceId, type: 'PUBLICATION_PARTIAL_SUCCESS', contentId }
+    });
+    assert.equal(partialNotifs.length, 1, 'kısmi başarı bildirimi tam bir kez oluşturulmalı');
+    assert.ok(partialNotifs[0].message.includes('2 platformda yayınlandı'), 'bildirim Türkçe özet içermeli');
+
+    // Tekrarlanan rollup yeni bildirim üretmemeli (durum değişimi yok).
+    const { rollupContentStatus } = await import('../src/lib/social/publishingService');
+    await rollupContentStatus(contentId);
+    const partialNotifsAgain = await prisma.notification.count({
+      where: { workspaceId: ctx.workspaceId, type: 'PUBLICATION_PARTIAL_SUCCESS', contentId }
+    });
+    assert.equal(partialNotifsAgain, 1, 'tekrarlanan rollup bildirim spamı üretmemeli');
   });
 
   it('yalnızca başarısız hedefi yeniden dener → içerik PUBLISHED, diğerleri tekrar yayınlanmaz', async () => {

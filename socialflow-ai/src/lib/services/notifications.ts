@@ -8,7 +8,9 @@ import prisma from '../prisma';
 export type NotificationType =
   | 'INFO'
   | 'PUBLISHED'
+  | 'PUBLICATION_PARTIAL_SUCCESS'
   | 'PUBLISH_FAILED'
+  | 'TOKEN_EXPIRING'
   | 'SCHEDULED'
   | 'DRAFT'
   | 'APPROVAL'

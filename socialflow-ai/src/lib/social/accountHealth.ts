@@ -190,6 +190,28 @@ export async function checkAccountHealth(
     });
   }
 
+  // TOKEN_EXPIRING paritesi: anahtar 24 saat içinde doluyorsa uyar (günde bir kez)
+  const expiringSoon = checks.find((c) => c.key === 'expiry' && c.level === 'WARNING');
+  if (ok && expiringSoon && options.notifyOnFailure !== false) {
+    const recent = await prisma.notification.findFirst({
+      where: {
+        workspaceId: account.workspaceId,
+        type: 'TOKEN_EXPIRING',
+        createdAt: { gte: new Date(Date.now() - 20 * 3600_000) }
+      }
+    });
+    if (!recent) {
+      await notify(account.workspaceId, {
+        type: 'TOKEN_EXPIRING',
+        severity: 'WARNING',
+        title: `${platformName} erişim anahtarının süresi doluyor`,
+        message: `${account.displayName} (${account.handle}) hesabının erişim anahtarı 24 saat içinde dolacak. Yeniden bağlamazsanız planlanan yayınlar başarısız olur.`,
+        actionLabel: 'Hesabı Yeniden Bağla',
+        actionRoute: '/app/hesaplar'
+      });
+    }
+  }
+
   return {
     ok,
     accountId: account.id,

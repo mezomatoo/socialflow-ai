@@ -651,6 +651,11 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
   else if (counts.approval > 0) status = 'APPROVAL_PENDING';
   else if (counts.scheduled > 0) status = 'SCHEDULED';
 
+  const previous = await prisma.content.findUnique({
+    where: { id: contentId },
+    select: { status: true, workspaceId: true, title: true }
+  });
+
   await prisma.content.update({
     where: { id: contentId },
     data: {
@@ -658,5 +663,19 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
       publishedAt: status === 'PUBLISHED' || status === 'PARTIALLY_PUBLISHED' ? new Date() : null
     }
   });
+
+  // Kısmi başarı: içerik-bazlı tek bildirim (durum değişiminde bir kez) — §56
+  if (status === 'PARTIALLY_PUBLISHED' && previous && previous.status !== 'PARTIALLY_PUBLISHED') {
+    const { notify } = await import('../services/notifications');
+    await notify(previous.workspaceId, {
+      type: 'PUBLICATION_PARTIAL_SUCCESS',
+      title: 'Yayın kısmen tamamlandı',
+      message: `"${previous.title}" kısmen yayınlandı: ${counts.published} platformda yayınlandı, ${counts.failed + counts.scheduled} platform başarısız/bekliyor.`,
+      severity: 'WARNING',
+      contentId,
+      actionLabel: 'İçeriği Gör',
+      actionRoute: `/app/icerik/${contentId}`
+    });
+  }
   return status;
 }
