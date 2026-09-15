@@ -35,10 +35,13 @@ model User {
   id           String    @id @default(cuid())
   workspaceId  String
   email        String    @unique
-  passwordHash String // argon2id / bcrypt — asla düz metin
+  passwordHash String // scrypt (bkz. src/lib/crypto.ts) — asla düz metin
   name         String
   avatarUrl    String?
-  role         String    @default("OWNER") // Role
+  role         String    @default("OWNER") // Role — üyelik yoksa geriye dönük varsayılan
+  // Durum: ACTIVE | INVITED | SUSPENDED | DELETED (soft delete/arşiv stratejisi §87)
+  status       String    @default("ACTIVE")
+  emailVerifiedAt DateTime?
   locale       String    @default("tr-TR")
   timezone     String    @default("Europe/Istanbul")
   isActive     Boolean   @default(true)
@@ -47,6 +50,8 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships    WorkspaceMember[]
+  passwordResets PasswordResetToken[]
   createdContent Content[]      @relation("ContentCreator")
   approvals      Content[]      @relation("ContentApprover")
   notifications  Notification[]
@@ -87,6 +92,7 @@ model Workspace {
   updatedAt DateTime @updatedAt
 
   users            User[]
+  members          WorkspaceMember[]
   brands           Brand[]
   socialAccounts   SocialAccount[]
   mediaAssets      MediaAsset[]
@@ -99,6 +105,7 @@ model Workspace {
   notifications    Notification[]
   analytics        AnalyticsSnapshot[]
   auditLogs        AuditLog[]
+  aiGenerations    AiGeneration[]
   jobs             Job[]
   appSettings      AppSettings?
   integrationState ProviderIntegration[]
@@ -306,6 +313,7 @@ model MediaAsset {
   folder           MediaFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
   contentLinks     ContentMedia[]
   platformContents PlatformContent[]
+  variants         MediaVariant[]
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, kind])
@@ -332,7 +340,9 @@ model Content {
   timezone         String    @default("Europe/Istanbul")
   scheduleMode     String    @default("NOW") // NOW | SCHEDULE | DRAFT
   scheduledFor     DateTime?
-  status           String    @default("DRAFT") // ContentStatus
+  status           String    @default("DRAFT") // ContentStatus: DRAFT | PROCESSING | READY | ARCHIVED (+ yayın durumları)
+  // İçeriğin kaynağı: MANUAL | AI_ASSISTED | AI_GENERATED | IMPORTED | REPURPOSED
+  origin           String    @default("MANUAL")
   adaptState       String    @default("NONE") // NONE | ADAPTING | ADAPTED | PARTIAL | ERROR
   version          Int       @default(1)
   createdById      String?
@@ -349,6 +359,7 @@ model Content {
   approvedBy       User?               @relation("ContentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   media            ContentMedia[]
   versions         ContentVersion[]
+  aiGenerations    AiGeneration[]
   platformContents PlatformContent[]
   schedules        Schedule[]
   notifications    Notification[]
@@ -423,6 +434,8 @@ model PlatformContent {
 
   charLimit Int @default(2200)
   charUsed  Int @default(0)
+  // Üretimde kullanılan PlatformRule sürümü (kural değişse bile kayıt korunur).
+  platformRuleVersion Int?
 
   status         String    @default("DRAFT") // PublishStatus
   scheduledFor   DateTime?
@@ -561,10 +574,13 @@ model PlatformRule {
   capabilities             String   @default("[]") // PG: Json
   source                   String   @default("BUILTIN") // BUILTIN | SYNCED | MANUAL
   active                   Boolean  @default(true)
+  // Kural sürümü: içerik/PlatformContent hangi sürümle üretildiğini saklar.
+  version                  Int      @default(1)
   lastUpdatedAt            DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions  PlatformRuleVersion[]
 
   @@unique([workspaceId, platform, contentType])
   @@index([workspaceId, platform])
@@ -1183,4 +1199,148 @@ model BrandMemory {
   @@index([brandKitId])
   @@index([workspaceId])
   @@index([brandId])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Çalışma alanı üyeliği (RBAC temeli)
+// -----------------------------------------------------------------------------
+// İş verileri doğrudan kullanıcıya DEĞİL, çalışma alanına bağlıdır. Kullanıcı ile
+// çalışma alanı arasındaki ilişki bu tabloda tutulur; ekipler, acenteler, müşteri
+// hesapları ve ileriki fazlardaki roller (RBAC) bu yapı üzerine kurulur.
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    @default("OWNER") // OWNER | ADMIN | EDITOR | APPROVER | VIEWER | ANALYST
+  status      String    @default("ACTIVE") // ACTIVE | INVITED | SUSPENDED
+  invitedById String?
+  invitedAt   DateTime?
+  joinedAt    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId, role])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Şifre sıfırlama
+// -----------------------------------------------------------------------------
+// Yalnızca token'ın SHA-256 özeti saklanır; ham token e-postayla gönderilir.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Medya varyantı
+// -----------------------------------------------------------------------------
+// Orijinal yükleme ASLA değiştirilmez. Her platform/içerik türü için üretilen
+// kırpılmış/ölçeklenmiş türev burada ayrı bir kayıt olarak tutulur.
+model MediaVariant {
+  id           String   @id @default(cuid())
+  mediaAssetId String
+  workspaceId  String
+  platform     String? // PlatformCode (genel varyantlar için boş olabilir)
+  contentType  String? // ContentType
+  kind         String   @default("CROP") // CROP | SCALE | THUMBNAIL | COVER | VIDEO_POSTER
+  aspectRatio  String? // "1:1" | "4:5" | "9:16" | "16:9"
+  storageKey   String
+  publicUrl    String?
+  mimeType     String
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  bytes        Int?
+  focalPoint   String? // PG: Json { x, y }
+  cropMode     String   @default("SMART") // SMART | MANUAL | FIT
+  // Yapay zekâ DEĞİL, deterministik/akıllı kırpma bilgisi (şeffaflık için).
+  processingMethod String @default("DETERMINISTIC") // DETERMINISTIC | USER_FOCAL_POINT | AI_SALIENCY (ileride)
+  processingStatus String @default("READY") // PENDING | PROCESSING | READY | FAILED (yüklendi/işleniyor/hazır/başarısız)
+  processingMetadata String @default("{}") // PG: Json — kırpma kutusu, kaynak boyut, hata mesajı
+  checksum     String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaAssetId, platform, contentType, aspectRatio])
+  @@index([mediaAssetId])
+  @@index([workspaceId, platform])
+  @@index([processingStatus])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Yapay zekâ üretim kaydı (denetim + tekrarlanabilirlik)
+// -----------------------------------------------------------------------------
+// Gizli anahtar/token ASLA saklanmaz. Yalnızca sağlayıcı adı, model, istem
+// özeti (hash) ve sonuç meta verisi tutulur.
+model AiGeneration {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contentId   String?
+  brandId     String?
+  userId      String?
+  // ADAPT_CAPTION | GENERATE_CAPTION | HASHTAGS | SPELLCHECK | VARIANT_COPY ...
+  type        String
+  provider    String // deterministic | openai | anthropic
+  model       String?
+  platform    String?
+  contentType String?
+  inputHash   String? // istem (prompt) özeti — kişisel veri saklanmaz
+  status      String   @default("SUCCESS") // SUCCESS | FAILED | SKIPPED
+  errorCode   String?
+  tokensIn    Int?
+  tokensOut   Int?
+  durationMs  Int?
+  metadata    String   @default("{}") // PG: Json — uyarılar, korunan gerçekler, sürüm
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content   Content?  @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([contentId])
+  @@index([type, status])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 1 — Platform kural sürümleri
+// -----------------------------------------------------------------------------
+// Kurallar zamanla değişir. Güncelleme sırasında eski tanım SİLİNMEZ; yeni bir
+// sürüm satırı olarak saklanır. Üretilmiş içerikler kullandıkları sürümü
+// (`PlatformContent.platformRuleVersion`) referans alır.
+model PlatformRuleVersion {
+  id            String   @id @default(cuid())
+  platformRuleId String
+  workspaceId   String
+  platform      String
+  contentType   String
+  version       Int
+  label         String
+  // Kuralın tam anlık görüntüsü (PG: Json)
+  snapshot      String   @default("{}")
+  changeNote    String?
+  changedById   String?
+  createdAt     DateTime @default(now())
+
+  rule PlatformRule @relation(fields: [platformRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([platformRuleId, version])
+  @@index([workspaceId, platform, contentType])
 }

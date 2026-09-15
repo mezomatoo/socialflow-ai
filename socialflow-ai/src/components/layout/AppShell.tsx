@@ -284,7 +284,7 @@ export function AppShell({
                         notifications.map((n) => (
                           <Link
                             key={n.id}
-                            href={n.actionRoute ?? '/bildirimler'}
+                            href={n.actionRoute ?? '/app/bildirimler'}
                             className={clsx('flex gap-2.5 border-b border-line px-4 py-3 transition-colors last:border-0 hover:bg-surface-subtle', !n.readAt && 'bg-brand-50/40')}
                             onClick={async () => {
                               await api.post(`/api/notifications/${n.id}/read`).catch(() => undefined);
@@ -423,7 +423,7 @@ function GlobalSearch({ onClose }: { onClose: () => void }) {
   const groups = useMemo(() => {
     if (!results) return [];
     return [
-      { label: 'İçerikler', icon: 'draft', items: (results.contents ?? []).map((c: any) => ({ href: `/yeni-icerik/${c.id}`, title: c.title ?? (c.masterCaption.slice(0, 60) || 'Başlıksız içerik'), sub: c.statusLabel })) },
+      { label: 'İçerikler', icon: 'draft', items: (results.contents ?? []).map((c: any) => ({ href: `/app/icerik/${c.id}`, title: c.title ?? (c.masterCaption.slice(0, 60) || 'Başlıksız içerik'), sub: c.statusLabel })) },
       { label: 'Markalar', icon: 'brand', items: (results.brands ?? []).map((b: any) => ({ href: `/marka-profilleri?brand=${b.id}`, title: b.name, sub: b.website ?? '' })) },
       { label: 'Kampanyalar', icon: 'zap', items: (results.campaigns ?? []).map((c: any) => ({ href: `/takvim?campaign=${c.id}`, title: c.name, sub: c.code })) },
       { label: 'Medya', icon: 'image', items: (results.media ?? []).map((m: any) => ({ href: `/medya?asset=${m.id}`, title: m.originalName, sub: `${m.kind} · ${m.format}` })) }

@@ -59,6 +59,8 @@ async function getPreviewDemoSession(): Promise<SessionContext | null> {
       email: user.email,
       name: user.name,
       role: user.role as Role,
+      membershipId: null,
+      membershipStatus: 'ACTIVE',
       avatarUrl: user.avatarUrl,
       workspaceId: user.workspaceId,
       workspaceName: user.workspace.name,
@@ -76,6 +78,9 @@ export interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  /** Çalışma alanı üyeliği (§14/15) — RBAC temeli. */
+  membershipId: string | null;
+  membershipStatus: string;
   avatarUrl: string | null;
   workspaceId: string;
   workspaceName: string;
@@ -174,13 +179,16 @@ export async function getSession(): Promise<SessionContext | null> {
       include: {
         user: {
           include: {
-            workspace: { select: { id: true, name: true, slug: true, demoMode: true, timezone: true, locale: true } }
+            workspace: { select: { id: true, name: true, slug: true, demoMode: true, timezone: true, locale: true } },
+            memberships: { select: { id: true, role: true, status: true } }
           }
         }
       }
     });
 
     if (session && !session.revokedAt && session.expiresAt >= new Date() && session.user?.isActive) {
+      // Rol, çalışma alanı üyeliğinden gelir (yoksa kullanıcı kaydındaki role düşülür).
+      const membership = session.user.memberships[0] ?? null;
       return {
         sessionId: session.id,
         csrfToken: session.csrfToken,
@@ -188,7 +196,9 @@ export async function getSession(): Promise<SessionContext | null> {
           id: session.user.id,
           email: session.user.email,
           name: session.user.name,
-          role: session.user.role as Role,
+          role: (membership?.role as Role) ?? (session.user.role as Role),
+          membershipId: membership?.id ?? null,
+          membershipStatus: membership?.status ?? 'ACTIVE',
           avatarUrl: session.user.avatarUrl,
           workspaceId: session.user.workspaceId,
           workspaceName: session.user.workspace.name,
@@ -289,4 +299,56 @@ export function clientIp(request?: Request): string {
 
 export function userAgent(request?: Request): string {
   return (request?.headers.get('user-agent') || headers().get('user-agent') || '').slice(0, 400);
+}
+
+// ---------------------------------------------------------------------------
+// Çalışma alanı üyeliği (§14/15) — RBAC temeli
+// ---------------------------------------------------------------------------
+
+export const WORKSPACE_MEMBER_STATUSES = ['ACTIVE', 'INVITED', 'SUSPENDED'] as const;
+export type WorkspaceMemberStatus = (typeof WORKSPACE_MEMBER_STATUSES)[number];
+
+/** Çalışma alanı + kullanıcı için üyelik kaydını döner (yoksa null). */
+export async function getMembership(workspaceId: string, userId: string) {
+  return prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    select: { id: true, role: true, status: true, joinedAt: true }
+  });
+}
+
+/**
+ * Üyeliği garanti eder, yoksa oluşturur. Kayıt (register) akışı ve mevcut
+ * verilerin taşınması (backfill) için kullanılır.
+ */
+export async function ensureMembership(params: {
+  workspaceId: string;
+  userId: string;
+  role: Role;
+  status?: WorkspaceMemberStatus;
+}) {
+  const existing = await getMembership(params.workspaceId, params.userId);
+  if (existing) return existing;
+  return prisma.workspaceMember.create({
+    data: {
+      workspaceId: params.workspaceId,
+      userId: params.userId,
+      role: params.role,
+      status: params.status ?? 'ACTIVE'
+    },
+    select: { id: true, role: true, status: true, joinedAt: true }
+  });
+}
+
+/**
+ * Oturumun belirli bir çalışma alanına erişimini doğrular.
+ * Kiracı izolasyonu (§16) bu fonksiyon üzerinden sağlanır.
+ */
+export async function assertWorkspaceAccess(session: SessionContext, workspaceId: string, minimum?: Role) {
+  if (session.user.workspaceId !== workspaceId) throw new ForbiddenError('Bu çalışma alanına erişiminiz yok.');
+  const membership =
+    (await getMembership(workspaceId, session.user.id)) ??
+    (await ensureMembership({ workspaceId, userId: session.user.id, role: session.user.role }));
+  if (membership.status !== 'ACTIVE') throw new ForbiddenError('Bu çalışma alanındaki üyeliğiniz etkin değil.');
+  if (minimum && !hasRole(membership.role, minimum)) throw new ForbiddenError();
+  return membership;
 }

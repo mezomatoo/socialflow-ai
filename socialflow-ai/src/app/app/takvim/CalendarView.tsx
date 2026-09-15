@@ -283,7 +283,7 @@ function RescheduleModal({
       title="Yayını Düzenle"
       footer={
         <div className="flex justify-between gap-2">
-          <Link href={`/yeni-icerik/${item.contentId}`} className="btn-secondary btn-md">
+          <Link href={`/app/icerik/${item.contentId}`} className="btn-secondary btn-md">
             <Icon name="edit" size={14} /> İçeriği Aç
           </Link>
           <div className="flex gap-2">

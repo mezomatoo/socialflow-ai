@@ -107,7 +107,7 @@ export function NotificationsView({ items: initial, timezone }: { items: NotifIt
           {shown.map((n) => {
             const sev = SEVERITY[n.severity] ?? SEVERITY.INFO;
             const unread = !n.readAt;
-            const route = n.actionRoute ?? (n.contentId ? `/yeni-icerik/${n.contentId}` : null);
+            const route = n.actionRoute ?? (n.contentId ? `/app/icerik/${n.contentId}` : null);
             return (
               <li
                 key={n.id}

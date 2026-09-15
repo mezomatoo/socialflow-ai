@@ -28,7 +28,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.connectedAccounts,
       hint: stats.needsReauth > 0 ? `${stats.needsReauth} hesap yeniden bağlanmalı` : `${stats.activeAccounts} hesap aktif`,
       icon: 'users',
-      href: '/sosyal-hesaplar',
+      href: '/app/hesaplar',
       tone: stats.needsReauth > 0 ? 'warning' : 'brand'
     },
     {
@@ -36,7 +36,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.publishingToday,
       hint: 'Bugünün içerik planı aşağıda',
       icon: 'zap',
-      href: '/takvim',
+      href: '/app/takvim',
       tone: 'brand'
     },
     {
@@ -44,7 +44,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.scheduledTotal,
       hint: 'Kuyrukta bekleyen tüm hedefler',
       icon: 'clock',
-      href: '/planlananlar',
+      href: '/app/icerik/planlananlar',
       tone: 'info'
     },
     {
@@ -52,7 +52,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.publishedTotal,
       hint: 'Toplam yayınlanan hedef',
       icon: 'check-circle',
-      href: '/yayinlananlar',
+      href: '/app/icerik/yayinlananlar',
       tone: 'success'
     },
     {
@@ -60,7 +60,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.failedTotal,
       hint: stats.failedTotal > 0 ? 'Tekrar denenebilir' : 'Sorun yok',
       icon: 'alert-triangle',
-      href: '/yayinlananlar?durum=FAILED',
+      href: '/app/icerik/yayinlananlar?durum=FAILED',
       tone: stats.failedTotal > 0 ? 'danger' : 'neutral'
     },
     {
@@ -68,7 +68,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.drafts,
       hint: 'Üzerinde çalışılan içerikler',
       icon: 'draft',
-      href: '/taslaklar',
+      href: '/app/icerik/taslaklar',
       tone: 'neutral'
     },
     {
@@ -76,7 +76,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.monthContents,
       hint: new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
       icon: 'layers',
-      href: '/takvim',
+      href: '/app/takvim',
       tone: 'brand'
     },
     {
@@ -84,7 +84,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
       value: stats.partiallyPublished,
       hint: 'Bazı platformlarda hata var',
       icon: 'alert-triangle',
-      href: '/yayinlananlar?durum=PARTIALLY_PUBLISHED',
+      href: '/app/icerik/yayinlananlar?durum=PARTIALLY_PUBLISHED',
       tone: stats.partiallyPublished > 0 ? 'warning' : 'neutral'
     }
   ];
@@ -176,7 +176,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
             <ul className="divide-y divide-line">
               {stats.todayPlan.map((item) => (
                 <li key={item.id}>
-                  <Link href={`/yeni-icerik/${item.contentId || item.platformContentId}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-surface-subtle">
+                  <Link href={`/app/icerik/${item.contentId || item.platformContentId}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-surface-subtle">
                     <span className="w-14 shrink-0 text-center">
                       <span className="block text-[15px] font-extrabold tabular-nums text-ink">{formatTime(item.scheduledFor, user.timezone)}</span>
                     </span>
@@ -254,7 +254,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
               <ul className="divide-y divide-line">
                 {stats.upcoming.slice(0, 6).map((u) => (
                   <li key={u.id}>
-                    <Link href={`/yeni-icerik/${u.contentId || u.platformContentId}`} className="flex items-center gap-2.5 px-5 py-2.5 transition-colors hover:bg-surface-subtle">
+                    <Link href={`/app/icerik/${u.contentId || u.platformContentId}`} className="flex items-center gap-2.5 px-5 py-2.5 transition-colors hover:bg-surface-subtle">
                       <PlatformIcon platform={u.platform} size={20} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[12.5px] font-semibold text-ink">
@@ -331,7 +331,7 @@ export function DashboardView({ stats, brands, accounts, recentFailures, user, d
                     <span className="ml-auto text-[11px] text-ink-faint">{formatRelative(f.updatedAt)}</span>
                   </div>
                   <p className="mt-1 text-[11.5px] leading-relaxed text-danger">{f.lastError ?? 'Bilinmeyen hata'}</p>
-                  <Link href={`/yeni-icerik/${f.contentId}`} className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-600 hover:underline">
+                  <Link href={`/app/icerik/${f.contentId}`} className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-600 hover:underline">
                     Tekrar Dene →
                   </Link>
                 </li>

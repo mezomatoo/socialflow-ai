@@ -12,6 +12,7 @@
  * bu betik geliştirme/demo ve otomatik kurulum içindir.
  */
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
   ROOT,
@@ -78,8 +79,23 @@ async function main() {
   }
 }
 
+/** Şema uygulandıktan sonra istemciyi yeniden üretir (prisma db push davranışı). */
+function regenerateClient() {
+  if (process.argv.includes('--skip-generate')) return;
+  const result = spawnSync(process.execPath, [new URL('./prisma-cli.mjs', import.meta.url).pathname, 'generate'], {
+    stdio: 'inherit',
+    env: process.env
+  });
+  if (result.status !== 0) {
+    console.warn('[db:push] İstemci yeniden üretilemedi; `npm run db:generate` komutunu çalıştırın.');
+  }
+}
+
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    regenerateClient();
+    process.exit(0);
+  })
   .catch((error) => {
     console.error(`[db:push] Hata: ${error?.message ?? error}`);
     process.exit(1);

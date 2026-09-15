@@ -189,7 +189,7 @@ async function handleTokenRefreshJob(_job: any, payload: any) {
         title: 'Hesap bağlantısı yenilenmeli',
         message: `${account.displayName} (${account.handle}) hesabının bağlantısının yenilenmesi gerekiyor.`,
         actionLabel: 'Hesabı Yeniden Bağla',
-        actionRoute: '/sosyal-hesaplar'
+        actionRoute: '/app/hesaplar'
       });
       console.error('[TokenRefreshJob]', account.id, message);
     }

@@ -155,7 +155,7 @@ export function NewContentView({
         timezone
       });
       toast.success('İçerik oluşturuldu', 'Şimdi platformlara uyarlayabilirsiniz.');
-      router.push(`/yeni-icerik/${res.id}`);
+      router.push(`/app/icerik/${res.id}`);
       router.refresh();
     } catch (e) {
       toast.error('Oluşturulamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');

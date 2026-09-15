@@ -118,7 +118,7 @@ export async function scheduleContent(params: {
     contentId,
     userId: params.userId ?? null,
     actionLabel: 'Takvimi Aç',
-    actionRoute: '/takvim'
+    actionRoute: '/app/takvim'
   });
 
   return { scheduled: targets.length, scheduledFor };
@@ -187,7 +187,7 @@ export async function createUpcomingReminders(workspaceId: string, timezone = DE
       timezone
     )}.`,
     actionLabel: 'Takvimi Aç',
-    actionRoute: '/takvim'
+    actionRoute: '/app/takvim'
   });
   return upcoming.length;
 }

@@ -63,7 +63,7 @@ class LocalStorage implements StorageDriver {
   }
 
   url(key: string): string {
-    return `/api/media/file/${safeKey(key)}`;
+    return `/api/v1/media/file/${safeKey(key)}`;
   }
 
   async exists(key: string): Promise<boolean> {

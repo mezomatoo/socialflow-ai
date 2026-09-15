@@ -65,7 +65,7 @@ export class GoogleBusinessProvider extends OAuth2Provider {
       providerCode: 'GBP_LOCAL_POSTS_UNAVAILABLE',
       friendlyMessage:
         'Google İşletme Profili gönderileri için herkese açık API erişimi Google tarafından kapatıldı. Gönderinizi Google Business Profile panelinden elle yayınlamanız gerekiyor. İçerik ve görsel bu ekranda hazırlandı.',
-      action: { label: 'Entegrasyon Durumu', route: '/ayarlar/entegrasyonlar' },
+      action: { label: 'Entegrasyon Durumu', route: '/app/ayarlar/entegrasyonlar' },
       retryable: false
     };
   }

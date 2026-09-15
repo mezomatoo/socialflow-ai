@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { ZodError } from './zod-lite';
 import { ForbiddenError, UnauthorizedError, verifyCsrf, getSession, clientIp } from './auth/session';
 import { rateLimit, rateLimitHeaders } from './security/rateLimit';
+import { AppError } from './errors';
+import { requestIdOf, reportError, logger } from './observability';
 
 /**
  * Tüm API route'ları için ortak sarmalayıcı.
@@ -50,6 +52,16 @@ export function serverError(message = 'Beklenmeyen bir hata oluştu. Lütfen tek
   return fail('INTERNAL_ERROR', message, 500);
 }
 
+/**
+ * Beklenmeyen hatalar için güvenli yanıt: iç ayrıntılar (Prisma/ORM mesajları,
+ * yığın izleri) ASLA istemciye gönderilmez. Yanıt, istek kimliği ile loglanır.
+ */
+function internalErrorResponse(requestId: string) {
+  const res = fail('INTERNAL_ERROR', 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.', 500);
+  res.headers.set('X-Request-Id', requestId);
+  return res;
+}
+
 interface RouteOptions {
   /** Mutasyonlarda CSRF doğrulaması (varsayılan: açık) */
   csrf?: boolean;
@@ -66,7 +78,9 @@ export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, op
   return async (request: Request, routeCtx: { params: Ctx }): Promise<Response> => {
     const ip = clientIp(request);
     const pathname = new URL(request.url).pathname;
-  const rl = rateLimit(`${ip}:${pathname}`, limit, windowMs);
+    const requestId = requestIdOf(request);
+    const startedAt = Date.now();
+    const rl = rateLimit(`${ip}:${pathname}`, limit, windowMs);
     if (!rl.ok) {
       return fail(
         'RATE_LIMITED',
@@ -88,14 +102,26 @@ export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, op
 
       const response = await handler(request, { params: routeCtx.params, session: session! });
       Object.entries(rateLimitHeaders(rl)).forEach(([k, v]) => response.headers.set(k, v));
+      response.headers.set('X-Request-Id', requestId);
+      logger.info({
+        event: 'api.request',
+        requestId,
+        method: request.method,
+        path: pathname,
+        status: response.status,
+        durationMs: Date.now() - startedAt
+      });
       return response;
     } catch (err) {
       if (err instanceof UnauthorizedError) return unauthorized(err.message);
       if (err instanceof ForbiddenError) return forbidden(err.message);
       if (err instanceof ZodError) return badRequest(err.issues[0]?.message ?? 'Geçersiz istek.', err.issues);
-      console.error('[api]', new URL(request.url).pathname, err);
-      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
-      return serverError(process.env.APP_ENV === 'production' ? undefined : message);
+      if (err instanceof AppError) {
+        reportError(err, { event: 'api.app_error', requestId, path: pathname, code: err.code });
+        return fail(err.code, err.userMessage, err.status, err.details);
+      }
+      reportError(err, { event: 'api.unhandled_error', requestId, method: request.method, path: pathname });
+      return internalErrorResponse(requestId);
     }
   };
 }
