@@ -16,7 +16,9 @@ async function fixture() {
   const user = await prisma.user.create({ data: { workspaceId: workspace.id, name: 'Test', email: `${randomUUID()}@test.invalid`, passwordHash: 'no-login', role: 'OWNER' } });
   const account = await prisma.socialAccount.create({ data: { workspaceId: workspace.id, platform: 'INSTAGRAM', externalId: 'verified-ig-id', handle: '@verified', displayName: 'Verified', demoAccount: false, scopes: INSTAGRAM_PUBLISH_SCOPES.join(',') } });
   await prisma.socialProviderToken.create({ data: { socialAccountId: account.id, accessTokenEnc: toCipherText('old-test-token'), scope: INSTAGRAM_PUBLISH_SCOPES.join(',') } });
-  const session: SessionContext = { sessionId: 'real-test-session', csrfToken: 'test', user: { id: user.id, workspaceId: workspace.id, role: 'OWNER', name: user.name, email: user.email, avatarUrl: null, workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode: false, timezone: 'Europe/Istanbul', locale: 'tr' } };
+  const session: SessionContext = { sessionId: 'real-test-session', csrfToken: 'test', user: { id: user.id, workspaceId: workspace.id, role: 'OWNER',
+        membershipId: 'membership-1',
+        membershipStatus: 'ACTIVE', name: user.name, email: user.email, avatarUrl: null, workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode: false, timezone: 'Europe/Istanbul', locale: 'tr' } };
   let exchanges = 0;
   const adapter = {
     getAuthorizationUrl(p: { state: string; redirectUri: string; scopes?: string[] }) { return `https://www.facebook.com/dialog/oauth?${new URLSearchParams({ state: p.state, redirect_uri: p.redirectUri, scope: p.scopes!.join(',') })}`; },

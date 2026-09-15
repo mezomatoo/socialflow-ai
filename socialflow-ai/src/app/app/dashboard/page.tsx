@@ -68,7 +68,7 @@ export default async function DashboardPage() {
       accounts={JSON.parse(JSON.stringify(accounts))}
       recentFailures={JSON.parse(JSON.stringify(recentFailures))}
       user={{ name: session.user.name, workspaceName: session.user.workspaceName, timezone: session.user.timezone }}
-      demoMode={session.user.demoMode},
+      demoMode={session.user.demoMode}
       assistant={JSON.parse(JSON.stringify(assistant))}
     />
   );

@@ -1370,6 +1370,7 @@ model PlatformRuleVersion {
 
   @@unique([platformRuleId, version])
   @@index([workspaceId, platform, contentType])
+}
 
 // PHASE 5 — additive inbox foundation. No publishing/token tables replaced.
 model SocialParticipant {
@@ -1539,21 +1540,33 @@ model AdProviderCapability {
 }
 
 // Central product truth. No provider catalog or second commerce product model.
+// --- Ürün Kataloğu (§100-§105) — 3eb kiracı izolasyonu + 0d6 AI katalog alanları birleşimi ---
 model Product {
-  id String @id @default(cuid())
+  id          String   @id @default(cuid())
   workspaceId String
-  brandId String
-  name String
-  description String @default("")
-  status String @default("ACTIVE")
-  version Int @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  brandId     String
+  name        String
+  sku         String?
+  category    String?
+  description String   @default("")
+  url         String?
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
-  variants ProductVariant[]
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  variants  ProductVariant[]
+  media     ProductMedia[]
+  facts     ProductFact[]
+  claims    ProductClaim[]
+  offers    CampaignOffer[]
+
   @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
   @@index([workspaceId, brandId, status])
+  @@index([brandId])
 }
 
 model ProductVariant {
@@ -1653,34 +1666,6 @@ model ContactConversationLink {
   @@index([workspaceId, contactId])
 }
 
-// --- Ürün Kataloğu (§100-§105) — 3eb çalışma alanı izolasyonu + 0d6 AI katalog alanları birleşimi ---
-model Product {
-  id          String   @id @default(cuid())
-  workspaceId String
-  brandId     String
-  name        String
-  sku         String?
-  category    String?
-  description String   @default("")
-  url         String?
-  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
-  version     Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
-  variants  ProductVariant[]
-  media     ProductMedia[]
-  facts     ProductFact[]
-  claims    ProductClaim[]
-  offers    CampaignOffer[]
-
-  @@unique([workspaceId, id])
-  @@unique([workspaceId, sku])
-  @@index([workspaceId, brandId, status])
-  @@index([brandId])
-}
 
 // =============================================================================
 //  PHASE 4 — EXTENDED MODELS (§136): Product, Creative, AI, Automation, Trends

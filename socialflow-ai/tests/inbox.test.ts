@@ -22,7 +22,9 @@ async function tenant(suffix: string) {
   const user = await prisma.user.create({ data: { workspaceId: workspace.id, name: `Üye ${suffix}`, email: `${randomUUID()}@test.invalid`, passwordHash: 'not-a-login', role: 'OWNER' } });
   const brand = await prisma.brand.create({ data: { workspaceId: workspace.id, name: 'Test Marka', slug: 'test' } });
   const account = await prisma.socialAccount.create({ data: { workspaceId: workspace.id, brandId: brand.id, platform: 'INSTAGRAM', handle: `@test-${suffix}`, displayName: 'Test Hesap' } });
-  const actor: Actor = { id: user.id, workspaceId: workspace.id, role: 'OWNER', name: user.name, email: user.email, avatarUrl: null, workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode: true, timezone: 'Europe/Istanbul', locale: 'tr' };
+  const actor: Actor = { id: user.id, workspaceId: workspace.id, role: 'OWNER',
+        membershipId: 'membership-1',
+        membershipStatus: 'ACTIVE', name: user.name, email: user.email, avatarUrl: null, workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode: true, timezone: 'Europe/Istanbul', locale: 'tr' };
   return { actor, account };
 }
 describe('Faz 5 — Gelen Kutusu güvenlik ve iş akışı', () => {

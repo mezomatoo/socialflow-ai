@@ -216,3 +216,24 @@ Ek testler: `npm run test:oauth`, `npm run test:instagram`, `npm run test:accoun
 Instagram testleri resmî API'ye bağlanmayan test adaptörleri kullanır.
 
 [Aşama 2 raporu ve GitHub kontrol noktaları](docs/PHASE5_STAGE2_REPORT.md)
+
+---
+
+## Arena Branch Entegrasyonu (2026-09)
+
+Bu dal, üç Arena oturum dalındaki geliştirmeleri tek projede birleştirir:
+
+| Dal | İçerik | Entegrasyon |
+| --- | --- | --- |
+| `arena/01a0a474-socialflow-ai` | Faz 1 temeli: `/app/*` sayfa yapısı, `/api/v1` sürümleme, Prisma 7 sürücü adaptörleri, kayıt/şifre akışları, faz kapıları, PWA, S3 SigV4 | Temel yapı olarak alındı |
+| `arena/01a0a3eb-socialflow-ai` | Faz 5-6: Gelen Kutusu, Instagram OAuth bağlama, reklam hesapları, katalog/CRM şeması (iş akışları veri korunarak emekliye ayrıldı) | Yeni `/app` + `/api/v1` yapısına uyarlandı |
+| `arena/01a0a0d6-socialflow-ai` | Faz 4: AI Studio, planlayıcı, kampanya üretici, otomasyonlar, trendler, rakip analizi, semantik arama, AI kullanım takibi | Yeni `/app` yapısına taşındı; Product şeması iki dalın birleşimi |
+
+Birleşim ilkeleri: hiçbir özellik atılmadı; aynı dosyada çakışan değişiklikler
+iki tarafın da işlevleri korunarak birleştirildi (ör. hesap API'lerinde faz kapısı
++ rol kontrolü birlikte); artık kullanılmayan eski `(app)` rota grubu kaldırıldı,
+eski URL'ler middleware'de 308 ile yeni yapıya yönlenir.
+
+Özel testler: `npm run test:inbox`, `npm run test:oauth`, `npm run test:instagram`,
+`npm run test:accounts`, `npm run test:advertising`, `npm run test:removed-modules`.
+Hesap bağlama (OAuth) modülü faz kapısı gerektirir: `FF_SOCIAL_ACCOUNTS=true`.

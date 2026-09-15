@@ -105,7 +105,7 @@ export function AutomationsView({ demoMode }: { demoMode: boolean }) {
                   <ul className="space-y-1.5">
                     {selected.actions.map((a:any,i:number)=>(
                       <li key={i} className="flex items-center gap-2 rounded-lg border border-line p-2.5 text-[13px]">
-                        <Icon name="zap" size={14} className="text-brand-600"/> {ACTION_LABELS[a.type]}
+                        <Icon name="zap" size={14} className="text-brand-600"/> {ACTION_LABELS[a.type as keyof typeof ACTION_LABELS] ?? a.type}
                         {a.type==='schedule_approved_content' ? <span className="ml-auto text-[11px] text-warning">Yetki + Audit gerekli</span> : null}
                       </li>
                     ))}

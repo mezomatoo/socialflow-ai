@@ -9,7 +9,9 @@ const tenants: string[] = [];
 async function fixture(demoMode = false) {
   const workspace = await prisma.workspace.create({ data: { name: 'Registration Test', slug: randomUUID(), demoMode } }); tenants.push(workspace.id);
   const user = await prisma.user.create({ data: { workspaceId: workspace.id, name: 'Test', email: `${randomUUID()}@test.invalid`, passwordHash: 'no-login', role: 'OWNER' } });
-  return { user: { ...user, role: 'OWNER', workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode }, sessionId: 'test-session', csrfToken: 'test' } as SessionContext;
+  return { user: { ...user, role: 'OWNER',
+        membershipId: 'membership-1',
+        membershipStatus: 'ACTIVE', workspaceName: workspace.name, workspaceSlug: workspace.slug, demoMode }, sessionId: 'test-session', csrfToken: 'test' } as SessionContext;
 }
 after(async () => { for (const id of tenants) await prisma.workspace.delete({ where: { id } }); await prisma.$disconnect(); });
 it('gerçek hesap OAuth öncesi bağlı gösterilmez; istemci token/izin/kimlik iddiası yok sayılır', async () => {

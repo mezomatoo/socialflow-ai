@@ -15,7 +15,9 @@ const code = (value: string) => (e: unknown) => e instanceof AdvertisingError &&
 async function fixture() {
   const ws = await prisma.workspace.create({ data: { name: 'Ads test', slug: randomUUID() } }); workspaces.push(ws.id);
   const user = await prisma.user.create({ data: { workspaceId: ws.id, name: 'Test', email: `${randomUUID()}@test.invalid`, passwordHash: 'no-login', role: 'OWNER' } });
-  const session: SessionContext = { sessionId: 'test', csrfToken: 'test', user: { ...user, role: 'OWNER', workspaceName: ws.name, workspaceSlug: ws.slug, demoMode: true } };
+  const session: SessionContext = { sessionId: 'test', csrfToken: 'test', user: { ...user, role: 'OWNER',
+        membershipId: 'membership-1',
+        membershipStatus: 'ACTIVE', workspaceName: ws.name, workspaceSlug: ws.slug, demoMode: true } };
   return session;
 }
 before(async () => {

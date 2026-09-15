@@ -113,7 +113,6 @@ export const NAV_GROUPS: { id: string; label: string; phase: NavPhase; items: Na
     items: [
       { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'insights', phase: 'phase2' }
     ]
-    ]
   }
 ];
 
