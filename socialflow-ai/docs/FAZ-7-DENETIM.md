@@ -46,9 +46,9 @@
 | Otomasyon motoru (kural, yürütme, döngü koruması) | WORKING (`0343666`) | NO ACTION |
 | **Trendler** | WORKING (DÜRÜST MOD) — `demoTrends` kaldırıldı; sağlayıcı yoksa boş liste + uyarı | COMPLETE (sağlayıcı bağlanınca gerçek veri) |
 | **Rakip Analizi** | WORKING (DÜRÜST MOD) — `mockCompetitors/mockInsights` + sahte fırsat maddeleri kaldırıldı | COMPLETE (sağlayıcı bağlanınca gerçek veri) |
-| Semantik arama | **DEAD CODE (DEMO)** — `search/semantic.ts` `demoIndex`; gerçek arama `/api/v1/search` zaten DB-backed ve workspace izoleli | **REMOVE PLACEHOLDER** |
-| `ai/creative.ts` + `creativeQuality.ts` | DEAD CODE (importer yok) | REMOVE |
-| `prisma-mock.ts` | DEAD CODE (importer yok) | REMOVE |
+| Semantik arama | COMPLETE — demo `search/semantic.ts` silindi; gerçek arama `/api/v1/search` DB-backed ve workspace izoleli | NO ACTION (embedding yükseltmesi ayrı iş) |
+| `ai/creative.ts` + `creativeQuality.ts` | REMOVE — silindi (importer=0 doğrulandı) | NO ACTION |
+| `prisma-mock.ts` | REMOVE — silindi (importer=0 doğrulandı) | NO ACTION |
 | Gelen Kutusu (Faz 5) | PARTIAL (gerçek tablolar + testler; sağlayıcı webhook'u yok) | INTEGRATE (sağlayıcı bağlıyken) |
 | CRM / Lead | PARTIAL (migration + tablolar mevcut) | VERIFY |
 | Reklamcılık (Faz 6 temel) | PARTIAL (contracts + service + testler; gerçek adapter yapılandırma ister) | DISABLE UNTIL CONFIGURED |
