@@ -30,7 +30,7 @@ const STATUS: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral
   EXPIRED: { tone: 'warning', label: 'Süresi Doldu' },
   REVOKED: { tone: 'danger', label: 'Bağlantı Kesildi' },
   ERROR: { tone: 'danger', label: 'Hata' },
-  NEEDS_REAUTH: { tone: 'warning', label: 'Yeniden Yetkilendirme' }
+  NEEDS_REAUTH: { tone: 'warning', label: 'Yetkilendirme Gerekli' }
 };
 
 const ACCOUNT_TYPES: Record<string, string> = {
@@ -292,7 +292,7 @@ function AddAccountModal({
     }
     setSaving(true);
     try {
-      const res = await api.post<{ id: string }>('/api/accounts', {
+      const res = await api.post<{ id: string; handle: string; demoAccount: boolean; connectionStatus: string }>('/api/accounts', {
         platform,
         handle: handle.trim().replace(/^@/, ''),
         displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
@@ -304,12 +304,12 @@ function AddAccountModal({
       onCreated({
         id: res.id,
         platform,
-        handle: handle.trim().replace(/^@/, ''),
+        handle: res.handle,
         displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
         avatarUrl: null,
         accountType,
-        connectionStatus: 'ACTIVE',
-        demoAccount: demoMode,
+        connectionStatus: res.connectionStatus,
+        demoAccount: res.demoAccount,
         lastError: null,
         brandId: brandId || null,
         brandName: brand?.name ?? null,
@@ -317,7 +317,7 @@ function AddAccountModal({
         externalId: null,
         tokenExpiresAt: null
       });
-      toast.success('Hesap eklendi', demoMode ? 'Demo hesabı olarak bağlandı.' : 'Bağlantı kuruldu.');
+      toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
     } catch (e) {
       toast.error('Eklenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
