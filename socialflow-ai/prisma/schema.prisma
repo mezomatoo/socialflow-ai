@@ -50,6 +50,7 @@ model User {
 
   @@index([workspaceId])
   inboxAssignments ConversationAssignment[]
+  ownedLeads Lead[]
   @@unique([workspaceId, id])
 
 }
@@ -104,6 +105,7 @@ model Workspace {
   @@index([slug])
   adAccounts AdAccount[]
   products Product[]
+  contacts Contact[]
 
 }
 
@@ -170,6 +172,7 @@ model Brand {
 
   adAccounts AdAccount[]
   products Product[]
+  contacts Contact[]
 
 }
 
@@ -649,6 +652,8 @@ model Campaign {
   contents  Content[]
   analytics AnalyticsSnapshot[]
 
+  leads Lead[]
+  @@unique([workspaceId, id])
   @@unique([workspaceId, code])
 }
 
@@ -1239,6 +1244,7 @@ model SocialConversation {
   participant SocialParticipant @relation(fields: [workspaceId, participantId], references: [workspaceId, id], onDelete: Restrict)
   messages SocialMessage[]
   assignments ConversationAssignment[]
+  contactLink ContactConversationLink?
   tags ConversationTag[]
   @@unique([workspaceId, id])
   @@unique([workspaceId, socialAccountId, providerConversationId])
@@ -1418,4 +1424,65 @@ model InventoryMovement {
   createdAt DateTime @default(now())
   variant ProductVariant @relation(fields: [workspaceId, variantId], references: [workspaceId, id], onDelete: Restrict)
   @@index([workspaceId, variantId, createdAt])
+}
+
+model Contact {
+  id String @id @default(cuid())
+  workspaceId String
+  brandId String
+  name String
+  email String?
+  phone String?
+  source String @default("USER_PROVIDED")
+  status String @default("ACTIVE")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  leads Lead[]
+  conversations ContactConversationLink[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, brandId, status])
+}
+model Lead {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  campaignId String?
+  ownerId String?
+  title String
+  stage String @default("NEW")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  campaign Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Restrict)
+  owner User? @relation(fields: [workspaceId, ownerId], references: [workspaceId, id], onDelete: Restrict)
+  activities LeadActivity[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, stage, updatedAt])
+}
+model LeadActivity {
+  id String @id @default(cuid())
+  workspaceId String
+  leadId String
+  actorId String
+  type String
+  text String
+  createdAt DateTime @default(now())
+  lead Lead @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, leadId, createdAt])
+}
+model ContactConversationLink {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  conversationId String @unique
+  actorId String
+  createdAt DateTime @default(now())
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, conversationId])
+  @@index([workspaceId, contactId])
 }
