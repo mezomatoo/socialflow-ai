@@ -286,19 +286,32 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
   }
 }
 
+/**
+ * İstemci IP'si. Öncelik: istek başlıkları → Next istek bağlamı → bilinmiyor.
+ * Next istek bağlamı DIŞINDA (testler, kuyruk işleri, worker) çağrıldığında
+ * `headers()` hata fırlattığı için güvenli biçimde ele alınır.
+ */
 export function clientIp(request?: Request): string {
-  const h = headers();
-  const fwd = h.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0].trim();
-  if (request) {
-    const rf = request.headers.get('x-forwarded-for');
-    if (rf) return rf.split(',')[0].trim();
+  const forwarded = request?.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  try {
+    const h = headers();
+    const fwd = h.get('x-forwarded-for');
+    if (fwd) return fwd.split(',')[0].trim();
+    return h.get('x-real-ip') || '0.0.0.0';
+  } catch {
+    return '0.0.0.0';
   }
-  return h.get('x-real-ip') || '0.0.0.0';
 }
 
 export function userAgent(request?: Request): string {
-  return (request?.headers.get('user-agent') || headers().get('user-agent') || '').slice(0, 400);
+  const direct = request?.headers.get('user-agent');
+  if (direct) return direct.slice(0, 400);
+  try {
+    return (headers().get('user-agent') || '').slice(0, 400);
+  } catch {
+    return '';
+  }
 }
 
 // ---------------------------------------------------------------------------
