@@ -124,7 +124,8 @@ export class InstagramProvider extends OAuth2Provider {
         payload,
         code: created.data?.error?.code ? String(created.data.error.code) : null,
         message: created.data?.error?.message ?? created.error,
-        httpStatus: created.status
+        httpStatus: created.status,
+        retryAfter: created.retryAfter ?? null
       });
     }
 
@@ -152,7 +153,8 @@ export class InstagramProvider extends OAuth2Provider {
         payload,
         code: published.data?.error?.code ? String(published.data.error.code) : null,
         message: published.data?.error?.message ?? published.error,
-        httpStatus: published.status
+        httpStatus: published.status,
+        retryAfter: published.retryAfter ?? null
       });
     }
 

@@ -18,6 +18,23 @@ import type {
 } from './types';
 
 /**
+ * Retry-After başlığını milisaniyeye çevirir (RFC 7231: saniye ya da HTTP-date).
+ * Geçersiz/eksik başlıkta null döner — kuyruk kendi varsayılan backoff'unu kullanır.
+ */
+export function parseRetryAfter(header: string | null | undefined): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return seconds >= 0 && seconds <= 86400 ? seconds * 1000 : null;
+  }
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) return null;
+  const ms = date - Date.now();
+  return ms > 0 && ms <= 86400_000 ? ms : null;
+}
+
+/**
  * BaseSocialProvider — tüm platform adaptörlerinin ortak tabanı.
  * Ortak işler:
  *  - Kural motoruna dayalı medya/açıklama doğrulaması
@@ -207,7 +224,7 @@ export abstract class BaseSocialProvider implements SocialProvider {
   protected async request<T = any>(
     url: string,
     init: RequestInit & { accessToken?: string; expected?: number[] } = {}
-  ): Promise<{ ok: boolean; status: number; data: T | null; error?: string }> {
+  ): Promise<{ ok: boolean; status: number; data: T | null; error?: string; retryAfter?: string | null }> {
     const { accessToken, expected, ...rest } = init;
     try {
       const res = await fetch(url, {
@@ -227,7 +244,7 @@ export abstract class BaseSocialProvider implements SocialProvider {
         data = null;
       }
       const ok = expected ? expected.includes(res.status) : res.ok;
-      return { ok, status: res.status, data, error: ok ? undefined : text.slice(0, 500) };
+      return { ok, status: res.status, data, error: ok ? undefined : text.slice(0, 500), retryAfter: res.headers.get('retry-after') };
     } catch (err) {
       return { ok: false, status: 0, data: null, error: safeProviderMessage(err instanceof Error ? err.message : err) };
     }
@@ -239,6 +256,7 @@ export abstract class BaseSocialProvider implements SocialProvider {
     code?: string | null;
     message?: string | null;
     httpStatus?: number | null;
+    retryAfter?: string | null;
   }): PublishResult {
     const friendly = toFriendlyError({ code: input.code, message: input.message, httpStatus: input.httpStatus });
     return {
@@ -249,7 +267,8 @@ export abstract class BaseSocialProvider implements SocialProvider {
       httpStatus: input.httpStatus ?? null,
       friendlyMessage: friendly.friendlyMessage,
       action: friendly.action ?? null,
-      retryable: friendly.retryable
+      retryable: friendly.retryable,
+      retryAfterMs: parseRetryAfter(input.retryAfter ?? null)
     };
   }
 

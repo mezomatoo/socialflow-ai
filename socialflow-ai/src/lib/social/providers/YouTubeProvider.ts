@@ -89,7 +89,7 @@ export class YouTubeProvider extends OAuth2Provider {
     const location = init.headers.get('location');
     if (!init.ok || !location) {
       const text = await init.text().catch(() => '');
-      return this.mapError({ payload, message: text.slice(0, 400) || 'Yükleme başlatılamadı.', httpStatus: init.status });
+      return this.mapError({ payload, message: text.slice(0, 400) || 'Yükleme başlatılamadı.', httpStatus: init.status, retryAfter: init.headers.get('retry-after') });
     }
 
     const upload = await fetch(location, {
@@ -98,7 +98,7 @@ export class YouTubeProvider extends OAuth2Provider {
       body: new Uint8Array(buf)
     });
     const text = await upload.text();
-    if (!upload.ok) return this.mapError({ payload, message: text.slice(0, 400), httpStatus: upload.status });
+    if (!upload.ok) return this.mapError({ payload, message: text.slice(0, 400), httpStatus: upload.status, retryAfter: upload.headers.get('retry-after') });
     try {
       const json = JSON.parse(text);
       return this.buildSuccess(payload, String(json.id), `https://www.youtube.com/watch?v=${json.id}`);

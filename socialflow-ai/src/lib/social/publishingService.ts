@@ -39,6 +39,8 @@ export interface PublishTargetResult {
   message: string;
   action?: { label: string; route: string } | null;
   retryable: boolean;
+  /** Sağlayıcı Retry-After önerisi (ms) — kuyruk yeniden denemede bunu kullanır. */
+  retryAfterMs?: number | null;
   demoMode: boolean;
   permalink?: string | null;
 }
@@ -403,6 +405,7 @@ export async function publishPlatformContent(
     message: friendlyMessage,
     action: result.action ?? null,
     retryable: Boolean(result.retryable),
+    retryAfterMs: result.retryAfterMs ?? null,
     demoMode: ctx.demoMode
   };
 }

@@ -106,6 +106,8 @@ export interface PublishResult {
   action?: { label: string; route: string } | null;
   /** Tekrar denenebilir mi? (429/5xx → true, 401/403 → genelde false) */
   retryable?: boolean;
+  /** Sağlayıcının Retry-After önerisi (ms) — varsa kuyruk bu süreye saygı gösterir. */
+  retryAfterMs?: number | null;
   /** Sağlayıcı tarafından zamanlandıysa */
   providerScheduled?: boolean;
   /**

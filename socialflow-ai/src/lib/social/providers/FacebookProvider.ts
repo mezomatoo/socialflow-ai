@@ -195,13 +195,14 @@ export class FacebookProvider extends OAuth2Provider {
     return parts.filter(Boolean).join('\n\n');
   }
 
-  private fbError(payload: PublishPayload, res: { status: number; data: any; error?: string }): PublishResult {
+  private fbError(payload: PublishPayload, res: { status: number; data: any; error?: string; retryAfter?: string | null }): PublishResult {
     const err = res.data?.error;
     return this.mapError({
       payload,
       code: err?.code ? `OAuthException ${err.code}${err.error_subcode ? `/${err.error_subcode}` : ''}` : null,
       message: err?.message ?? res.error,
-      httpStatus: res.status
+      httpStatus: res.status,
+      retryAfter: res.retryAfter ?? null
     });
   }
 

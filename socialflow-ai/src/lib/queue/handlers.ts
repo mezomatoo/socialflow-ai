@@ -67,9 +67,22 @@ async function handlePublishContentJob(job: any, payload: any) {
   });
 
   if (!result.ok && result.retryable) {
-    throw new Error(result.message); // kuyruk tekrar deneyecek
+    throw new PublishRetryError(result.message, result.retryAfterMs ?? null); // kuyruk tekrar deneyecek
   }
   return { ok: result.ok, status: result.status, contentId };
+}
+
+/**
+ * Sağlayıcı tekrar denemeye izin veriyorsa (429/5xx) fırlatılır.
+ * Retry-After önerisi varsa kuyruk kesin olarak o kadar bekler (§78).
+ */
+class PublishRetryError extends Error {
+  retryAfterMs: number | null;
+  constructor(message: string, retryAfterMs: number | null) {
+    super(message);
+    this.name = 'PublishRetryError';
+    this.retryAfterMs = retryAfterMs;
+  }
 }
 
 /**
@@ -395,7 +408,8 @@ export function startQueueWorker() {
           await completeJob(job.id, (result as Record<string, unknown>) ?? undefined);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          await failJob(job.id, message);
+          const retryAfterMs = err instanceof PublishRetryError ? err.retryAfterMs : null;
+          await failJob(job.id, message, retryAfterMs ?? 60_000, { exact: retryAfterMs != null });
         }
       }
     } catch (err) {

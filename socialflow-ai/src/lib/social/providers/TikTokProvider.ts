@@ -89,7 +89,8 @@ export class TikTokProvider extends OAuth2Provider {
         payload,
         code: init.data?.error?.code ?? null,
         message: init.data?.error?.message ?? init.data?.message ?? init.error,
-        httpStatus: init.status
+        httpStatus: init.status,
+        retryAfter: init.retryAfter ?? null
       });
     }
 

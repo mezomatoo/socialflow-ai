@@ -86,7 +86,8 @@ export class XProvider extends OAuth2Provider {
         payload,
         code: res.data?.errors?.[0]?.code ? String(res.data.errors[0].code) : null,
         message: res.data?.errors?.[0]?.message ?? res.data?.detail ?? res.error,
-        httpStatus: res.status
+        httpStatus: res.status,
+        retryAfter: res.retryAfter ?? null
       });
     }
     const id = String(res.data?.data?.id ?? '');

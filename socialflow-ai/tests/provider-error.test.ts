@@ -64,3 +64,39 @@ describe('ProviderErrorNormalizer', () => {
     assert.ok(safeProviderMessage(long).length <= 800);
   });
 });
+
+describe('Retry-After desteği (Faz 2 §78)', () => {
+  it('parseRetryAfter: saniye, HTTP-date ve geçersiz başlıkları doğru çözer', async () => {
+    const { parseRetryAfter } = await import('../src/lib/social/BaseSocialProvider');
+    assert.equal(parseRetryAfter('30'), 30_000);
+    assert.equal(parseRetryAfter('0'), 0);
+    assert.equal(parseRetryAfter(null), null);
+    assert.equal(parseRetryAfter('abc'), null, 'geçersiz başlık null dönmeli');
+    assert.equal(parseRetryAfter('999999'), null, '1 günden uzun öneri reddedilir');
+    const httpDate = new Date(Date.now() + 60_000).toUTCString();
+    const ms = parseRetryAfter(httpDate);
+    assert.ok(ms !== null && ms > 50_000 && ms <= 60_000, 'HTTP-date göreli ms üretmeli');
+  });
+
+  it('failJob exact: attempts ile carpilmadan kesin gecikme uygulanir', async () => {
+    const { enqueue, failJob, claimNextJob } = await import('../src/lib/queue/queue');
+    const { prisma } = await import('./helpers');
+    const ws = await prisma.workspace.create({ data: { name: 'RA-W', slug: `ra-${Date.now()}-${Math.floor(Math.random()*1e6)}` } });
+    const job = await enqueue({
+      workspaceId: ws.id,
+      type: 'TokenRefreshJob',
+      payload: { accountId: 'x' },
+      idempotencyKey: `ra-test-${Date.now()}-${Math.floor(Math.random()*1e6)}`
+    });
+    if (!job.created || !job.id) throw new Error('is kuyruga alinamadi');
+    // attempts'u 2'ye cikar (claim) — dogrusal backoff 60*2=120sn verirdi; exact 120sn ayni gorunur.
+    // Ayirt etmek icin exact=30sn veriyoruz: dogrusal olsaydi attempts(1)*60=60sn, exact ile ~30sn.
+    await claimNextJob('worker-test-ra');
+    await failJob(job.id, 'hiz siniri', 30_000, { exact: true });
+    const after = await prisma.job.findUniqueOrThrow({ where: { id: job.id } });
+    const deltaSec = Math.round(((after.runAt?.getTime() ?? 0) - Date.now()) / 1000);
+    assert.ok(deltaSec >= 28 && deltaSec <= 31, `kesin gecikme ~30sn olmali, gercek: ${deltaSec}sn`);
+    await prisma.job.delete({ where: { id: job.id } }).catch(() => {});
+    await prisma.workspace.delete({ where: { id: ws.id } }).catch(() => {});
+  });
+});
