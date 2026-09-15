@@ -42,7 +42,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: { b
     brandName: a.brand?.name ?? null,
     brandColor: a.brand?.primaryColor ?? null,
     externalId: a.externalId,
-    tokenExpiresAt: null as string | null
+    tokenExpiresAt: null as string | null,
+    lastSyncedAt: a.lastSyncedAt ? a.lastSyncedAt.toISOString() : null
   }));
 
   return (

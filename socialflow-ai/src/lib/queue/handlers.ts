@@ -27,12 +27,13 @@ export async function processJob(job: any): Promise<Record<string, unknown> | vo
       return handlePublishContentJob(job, payload);
     case 'SyncPublicationStatusJob':
       return handleSyncPublicationStatusJob(job, payload);
-    case 'MediaProcessingJob':
+    case 'CheckSocialAccountHealthJob':
+      return handleAccountHealthJob(job, payload);
+    case 'TokenRefreshJob':
+      return handleTokenRefreshJob(job, payload);    case 'MediaProcessingJob':
       return handleMediaProcessingJob(job, payload);
     case 'AnalyticsSyncJob':
       return handleAnalyticsSyncJob(job, payload);
-    case 'TokenRefreshJob':
-      return handleTokenRefreshJob(job, payload);
     default:
       throw new Error(`Bilinmeyen iş türü: ${job.type}`);
   }
@@ -208,6 +209,21 @@ async function handleSyncPublicationStatusJob(_job: any, payload: any) {
   return { status: 'TIMEOUT', check };
 }
 
+/**
+ * Faz 2 (§28): CheckSocialAccountHealthJob — token geçerliliği, profil
+ * erişimi ve yetenek envanterini denetler; sorun bulursa hesabı
+ * NEEDS_REAUTH'e çekip Türkçe bildirim üretir (§29: hesap asla sessizce
+ * silinmez).
+ */
+async function handleAccountHealthJob(_job: any, payload: any) {
+  const { checkAccountHealth, checkAllAccountHealth } = await import('../social/accountHealth');
+  if (payload.accountId) {
+    const result = await checkAccountHealth(String(payload.accountId), { notifyOnFailure: true });
+    return { accountId: result.accountId, ok: result.ok, status: result.connectionStatus };
+  }
+  return checkAllAccountHealth(payload.workspaceId ? String(payload.workspaceId) : undefined);
+}
+
 async function handleMediaProcessingJob(_job: any, payload: any) {
   const mediaId: string = payload.mediaId;
   if (!mediaId) throw new Error('mediaId eksik.');
@@ -368,6 +384,8 @@ export function startQueueWorker() {
     try {
       // Zamanlanmış içerikler için iş kuyruğa alındı mı?
       await ensureDueSchedules();
+      // Günlük bakım: token yenileme + hesap sağlığı (idempotent, günde 1 kez)
+      await ensureDailyMaintenance();
 
       for (let i = 0; i < env.queue.concurrency; i++) {
         const job = await claimNextJob(workerId);
@@ -396,6 +414,27 @@ export function stopQueueWorker() {
   if (timer) clearInterval(timer);
   timer = null;
   workerStarted = false;
+}
+
+/**
+ * Faz 2 (§28): her gün bir kez TokenRefreshJob + CheckSocialAccountHealthJob
+ * planlar. IdempotencyKey güne bağlıdır; çift iş oluşmaz. Tarayıcı kapalıyken
+ * de sunucu tarafında çalışır (§46 bulut planlama ilkesi).
+ */
+async function ensureDailyMaintenance() {
+  const today = new Date().toISOString().slice(0, 10);
+  await enqueue({
+    type: 'TokenRefreshJob',
+    idempotencyKey: `tokenrefresh:daily:${today}`,
+    maxAttempts: 1,
+    payload: {}
+  }).catch(() => undefined);
+  await enqueue({
+    type: 'CheckSocialAccountHealthJob',
+    idempotencyKey: `health:daily:${today}`,
+    maxAttempts: 1,
+    payload: {}
+  }).catch(() => undefined);
 }
 
 /** Vakti gelen Schedule kayıtları için PublishContentJob oluşturur. */
