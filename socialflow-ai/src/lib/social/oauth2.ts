@@ -63,20 +63,23 @@ export async function createOAuthState(params: {
   return { state, codeVerifier, expiresAt };
 }
 
-export async function consumeOAuthState(state: string) {
-  if (!state) return null;
-  const record = await prisma.oAuthState.findUnique({ where: { state } });
+export interface OAuthStateBinding {
+  platform: string;
+  userId: string;
+  workspaceId: string;
+}
+
+/** Check caller binding before consuming. Conditional update is the atomic replay gate. */
+export async function consumeOAuthState(state: string, binding: OAuthStateBinding) {
+  if (!state || state.length > 200 || !binding.userId || !binding.workspaceId) return null;
+  const where = { state, ...binding, consumedAt: null, expiresAt: { gt: new Date() } };
+  const record = await prisma.oAuthState.findFirst({ where });
   if (!record) return null;
-  if (record.consumedAt) return null;
-  if (record.expiresAt < new Date()) return null;
-
-  await prisma.oAuthState.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
-  // Süresi dolmuş kayıtları fırsat buldukça temizle
-  prisma.oAuthState
-    .deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 3600_000) } } })
-    .catch(() => undefined);
-
-  return record;
+  const claimed = await prisma.oAuthState.updateMany({
+    where: { id: record.id, ...where },
+    data: { consumedAt: new Date(), codeVerifier: null }
+  });
+  return claimed.count === 1 ? record : null;
 }
 
 export function buildAuthorizationUrl(config: OAuthConfig, params: { state: string; redirectUri: string; codeVerifier?: string }): string {

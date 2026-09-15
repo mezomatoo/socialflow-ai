@@ -15,7 +15,8 @@
     "test:setup": "DATABASE_URL=\"file:./test.db\" prisma db push --force-reset --skip-generate && DATABASE_URL=\"file:./test.db\" tsx prisma/seed.ts",
     "test": "DATABASE_URL=\"file:./test.db\" tsx --test tests/critical-path.test.ts tests/partial-failure.test.ts tests/brandkit.test.ts",
     "worker": "tsx scripts/worker.ts",
-    "test:inbox": "DATABASE_URL=\"file:./test.db\" tsx --test tests/inbox.test.ts"
+    "test:inbox": "DATABASE_URL=\"file:./test.db\" tsx --test tests/inbox.test.ts",
+    "test:oauth": "DATABASE_URL=\"file:./test.db\" tsx --test tests/oauth-state.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
