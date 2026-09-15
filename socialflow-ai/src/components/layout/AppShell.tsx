@@ -34,6 +34,8 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Görüntüleyici'
 };
 
+const ADMIN_ROLES = new Set(['OWNER', 'ADMIN']);
+
 export function AppShell({
   user,
   branding,
@@ -51,6 +53,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isAdminRole = ADMIN_ROLES.has(user.role);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ drafts: 0, scheduled: 0, unread: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
@@ -164,7 +167,7 @@ export function AppShell({
             <div key={group.id} className="mb-5 last:mb-0">
               <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-faint">{group.label}</p>
               <ul className="space-y-0.5">
-                {group.items.map((item) => {
+                {group.items.filter((item) => !item.adminOnly || isAdminRole).map((item) => {
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   const count = badgeFor(item.badge);
                   return (

@@ -13,6 +13,8 @@ export interface NavItem {
   icon: string;
   badge?: 'drafts' | 'scheduled' | 'notifications';
   group: string;
+  /** Yalnızca OWNER/ADMIN görebilir (yönetici operasyon sayfaları). */
+  adminOnly?: boolean;
   /** Kısa açıklama (başlık ipucu / aria-label). */
   description?: string;
 }
@@ -115,7 +117,8 @@ export const NAV_GROUPS: NavGroup[] = [
         badge: 'notifications',
         group: 'system'
       },
-      { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'system' },
+      { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'system', adminOnly: true },
+      { href: '/app/admin/sistem', label: 'Sistem Durumu', icon: 'database', group: 'system', adminOnly: true },
       { href: '/app/ayarlar', label: 'Ayarlar', icon: 'settings', group: 'system' }
     ]
   }
