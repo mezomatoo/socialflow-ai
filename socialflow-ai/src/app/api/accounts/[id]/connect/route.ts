@@ -1,4 +1,7 @@
-import { apiRoute, ok, badRequest } from '@/lib/api';
+import { assertRole } from '@/lib/auth/session';
+import { beginInstagramConnection } from '@/lib/social/instagramConnection';
+import { InstagramConnectionError } from '@/lib/social/instagramConnectionMessages';
+import { apiRoute, ok, badRequest, fail, notFound } from '@/lib/api';
 import prisma from '@/lib/prisma';
 import { getProvider, isDemoProvider } from '@/lib/social/registry';
 import { createOAuthState } from '@/lib/social/oauth2';
@@ -12,12 +15,13 @@ import type { PlatformCode } from '@/lib/platforms/platforms';
  */
 export const POST = apiRoute(
   async (request, { session, params }) => {
+    assertRole(session, 'EDITOR');
     const account = await prisma.socialAccount.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
-    if (!account) return badRequest('Hesap bulunamadı.');
+    if (!account) return notFound('Hesap bulunamadı.');
 
     const platform = account.platform as PlatformCode;
 
-    if (isDemoProvider(platform)) {
+    if (session.user.demoMode || isDemoProvider(platform)) {
       await audit({ workspaceId: session.user.workspaceId, userId: session.user.id, action: 'account.connect.demo', entityType: 'SocialAccount', entityId: params.id, request });
       return ok({
         demo: true,
@@ -25,6 +29,15 @@ export const POST = apiRoute(
         message: `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`,
         credentialsSet: Boolean(env.providers[platform]?.id && env.providers[platform]?.secret)
       });
+    }
+
+    if (platform === 'INSTAGRAM') {
+      try { return ok(await beginInstagramConnection(session, account.id)); }
+      catch (error) {
+        return error instanceof InstagramConnectionError
+          ? fail(error.code, error.message, error.status)
+          : fail('CONNECTION_FAILED', 'Bağlantı başlatılamadı. Lütfen tekrar deneyin.', 502);
+      }
     }
 
     const provider = getProvider(platform, { forceReal: true });
@@ -41,5 +54,5 @@ export const POST = apiRoute(
 
     return ok({ demo: false, authorizeUrl, state });
   },
-  { limit: 20 }
+  { limit: 20, sessionCsrf: true }
 );

@@ -44,12 +44,14 @@ export function AccountsView({
   items: initial,
   brands,
   platforms,
-  demoMode
+  demoMode,
+  connectionResult
 }: {
   items: AccountItem[];
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
+  connectionResult?: string | null;
 }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
@@ -129,6 +131,8 @@ export function AccountsView({
           <Icon name="plus" size={16} /> Hesap Bağla
         </button>
       </div>
+
+      {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
 
       {demoMode && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
@@ -224,7 +228,7 @@ export function AccountsView({
                           ))}
                         </select>
                         <div className="ml-auto flex items-center gap-1">
-                          {a.connectionStatus !== 'ACTIVE' && (
+                          {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
                               <Icon name="refresh" size={13} /> Yeniden Bağla
                             </button>
@@ -269,6 +273,7 @@ function AddAccountModal({
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
+  connectionResult?: string | null;
   onClose: () => void;
   onCreated: (acc: AccountItem) => void;
 }) {

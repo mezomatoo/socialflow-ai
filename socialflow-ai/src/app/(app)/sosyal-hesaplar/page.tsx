@@ -1,3 +1,4 @@
+import { INSTAGRAM_CONNECTION_MESSAGES } from '@/lib/social/instagramConnectionMessages';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
@@ -7,7 +8,7 @@ import { AccountsView } from './AccountsView';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Sosyal Medya Hesapları' };
 
-export default async function AccountsPage() {
+export default async function AccountsPage({ searchParams }: { searchParams: { baglanti?: string } }) {
   const session = await getSession();
   if (!session) redirect('/giris');
   const ws = session.user.workspaceId;
@@ -40,6 +41,7 @@ export default async function AccountsPage() {
 
   return (
     <AccountsView
+      connectionResult={searchParams.baglanti && Object.hasOwn(INSTAGRAM_CONNECTION_MESSAGES, searchParams.baglanti) ? INSTAGRAM_CONNECTION_MESSAGES[searchParams.baglanti as keyof typeof INSTAGRAM_CONNECTION_MESSAGES] : null}
       items={JSON.parse(JSON.stringify(items))}
       brands={JSON.parse(JSON.stringify(brands))}
       platforms={JSON.parse(JSON.stringify(PLATFORM_LIST.map((p) => ({ code: p.code, name: p.name, color: p.brandColor }))))}
