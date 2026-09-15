@@ -1652,3 +1652,503 @@ model ContactConversationLink {
   @@unique([workspaceId, conversationId])
   @@index([workspaceId, contactId])
 }
+
+// --- Ürün Kataloğu (§100-§105) — 3eb çalışma alanı izolasyonu + 0d6 AI katalog alanları birleşimi ---
+model Product {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  name        String
+  sku         String?
+  category    String?
+  description String   @default("")
+  url         String?
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  variants  ProductVariant[]
+  media     ProductMedia[]
+  facts     ProductFact[]
+  claims    ProductClaim[]
+  offers    CampaignOffer[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId, brandId, status])
+  @@index([brandId])
+}
+
+// =============================================================================
+//  PHASE 4 — EXTENDED MODELS (§136): Product, Creative, AI, Automation, Trends
+// =============================================================================
+
+// --- Ürün Kataloğu (§100-§105) ---
+
+model ProductMedia {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String
+  kind        String @default("IMAGE") // IMAGE | VIDEO
+  storageKey  String?
+  fileUrl     String?
+  mediaAssetId String?
+  width       Int?
+  height      Int?
+  bytesKb     Int?
+  isPrimary   Boolean @default(false)
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([workspaceId])
+}
+
+model ProductFact {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String
+  key         String // PRICE | FEATURE | USAGE | SPEC ...
+  value       String
+  status      String @default("VERIFIED") // VERIFIED | UNVERIFIED | EXPIRED (§102)
+  source      String?
+  sourceId    String?
+  verifiedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model ProductClaim {
+  id          String @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String?
+  type        String @default("REQUIRED_DISCLAIMER") // REQUIRED_DISCLAIMER | FORBIDDEN_PHRASE | REQUIRED_PHRASE | REGULATED_CLAIM (§105)
+  phrase      String
+  required    Boolean @default(false)
+  blocked     Boolean @default(false)
+  approvalStatus String @default("APPROVED")
+  createdAt   DateTime @default(now())
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+}
+
+model CampaignOffer {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  productId   String?
+  campaignId  String?
+  name        String?
+  price       Float?   // TRY
+  currency    String   @default("TRY")
+  discount    Float?   // %
+  coupon      String?
+  startDate   DateTime?
+  endDate     DateTime?
+  conditions  String?  // JSON or text
+  status      String   @default("VERIFIED") // VERIFIED | UNVERIFIED | EXPIRED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+  @@index([campaignId])
+}
+
+// --- AI / Kreatif (§56-§69, §107-§116) ---
+
+model PromptTemplate {
+  id           String   @id @default(cuid())
+  workspaceId  String?
+  name         String
+  service      String   // e.g. captionGeneration, imageGeneration, creativeResize
+  version      String   @default("1.0")
+  systemPrompt String
+  template     String   // handlebars-like
+  outputSchema String   @default("{}") // JSON schema
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([service, isActive])
+}
+
+model AiUsage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  brandId     String?
+  provider    String   // deterministic | openai | anthropic
+  service     String   // textGeneration | imageGeneration | imageEditing | videoProcessing | transcription | embeddings
+  task        String?  // detail
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  imageCount  Int      @default(0)
+  durationMs  Int      @default(0)
+  costUSD     Float    @default(0)
+  meta        String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([service])
+}
+
+model AiFeedback {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  brandId     String?
+  contentId   String?
+  service     String   // e.g. imageGeneration, captionGeneration
+  outputId    String?  // reference to generated artifact
+  rating      String   // LIKED | DISLIKED | BRAND_ALIGNED | BRAND_MISALIGNED
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, brandId])
+}
+
+model AiImageGeneration {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  userId      String?
+  prompt      String
+  negativePrompt String?
+  style       String?
+  aspectRatio String?  // 1:1 | 4:5 | 9:16 | 16:9
+  brandKitUsed Boolean @default(false)
+  productId   String?
+  status      String   @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED (Turkish: Kuyrukta etc. but stored English)
+  resultUrl   String?
+  resultKey   String?
+  error       String?
+  provider    String?
+  costUSD     Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, brandId])
+  @@index([status])
+}
+
+model MasterCreative {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  title       String?
+  storageKey  String   // master file
+  fileUrl     String?
+  width       Int?
+  height      Int?
+  aspectRatio String?
+  layers      String   @default("{}") // JSON design state
+  brandKitVersion Int?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  variants CreativeVariant[]
+  quality  CreativeQualityScore?
+
+  @@index([workspaceId, brandId])
+}
+
+model CreativeVariant {
+  id               String @id @default(cuid())
+  workspaceId      String
+  brandId          String
+  masterCreativeId String
+  platform         String // INSTAGRAM | FACEBOOK | ...
+  contentType      String // FEED | STORY | REEL ...
+  aspectRatio      String
+  width            Int?
+  height           Int?
+  storageKey       String?
+  fileUrl          String?
+  layers           String  @default("{}") // recomposed layers
+  status           String  @default("READY")
+  createdAt        DateTime @default(now())
+
+  master MasterCreative @relation(fields: [masterCreativeId], references: [id], onDelete: Cascade)
+
+  @@index([masterCreativeId])
+  @@index([workspaceId])
+}
+
+model CreativeQualityScore {
+  id               String @id @default(cuid())
+  workspaceId      String
+  brandId          String?
+  masterCreativeId String @unique
+  resolution       Int    @default(0) // 0-100
+  readability      Int    @default(0)
+  contrast         Int    @default(0)
+  composition      Int    @default(0)
+  brandConsistency Int    @default(0)
+  platformFit      Int    @default(0)
+  overall          Int    @default(0) // advisory
+  details          String @default("{}") // JSON breakdown
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  master MasterCreative @relation(fields: [masterCreativeId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// --- Otomasyon (§117-§124) ---
+model AutomationRule {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  trigger     String   // ContentCreated | ContentApproved | ...
+  conditions  String   @default("[]") // JSON array
+  actions     String   @default("[]") // JSON array
+  enabled     Boolean  @default(false) // disabled by default (§122)
+  autonomyLevel Int    @default(1) // 1-4
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  executions AutomationExecution[]
+
+  @@index([workspaceId, enabled])
+}
+
+model AutomationExecution {
+  id          String    @id @default(cuid())
+  workspaceId String
+  ruleId      String
+  trigger     String
+  triggerId   String?   // id of triggering entity
+  status      String    @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | SKIPPED
+  input       String    @default("{}") // JSON
+  output      String?   // JSON
+  error       String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([workspaceId, status])
+}
+
+// --- İçerik Planlama / Deneyler / Performans (§70-§93) ---
+model ContentPlan {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  campaignId  String?
+  title       String
+  dateFrom    DateTime
+  dateTo      DateTime
+  goal        String?
+  frequency   String? // e.g. 3x/week
+  platforms   String   @default("[]") // JSON
+  status      String   @default("DRAFT") // DRAFT | APPLIED | ARCHIVED
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ContentPlanItem[]
+
+  @@index([workspaceId, brandId])
+}
+
+model ContentPlanItem {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  brandId       String
+  planId        String
+  date          DateTime
+  platform      String
+  contentType   String?
+  topic         String?
+  headline      String?
+  captionConcept String?
+  creativeConcept String?
+  cta           String?
+  hashtags      String    @default("[]") // JSON
+  status        String    @default("PLANNED") // PLANNED | CREATED | PUBLISHED
+  contentId     String?
+  createdAt     DateTime  @default(now())
+
+  plan ContentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, date])
+  @@index([workspaceId])
+}
+
+model ContentExperiment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  name        String
+  hypothesis  String?
+  variantA    String    // JSON
+  variantB    String    // JSON
+  metric      String    @default("ENGAGEMENT") // ENGAGEMENT | REACH | ...
+  goal        String?
+  startAt     DateTime?
+  endAt       DateTime?
+  status      String    @default("DRAFT") // DRAFT | RUNNING | DONE | CANCELLED
+  winner      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+model PerformancePrediction {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  contentId   String?
+  platform    String
+  format      String?
+  publishAt   DateTime?
+  inputs      String   @default("{}") // JSON inputs §91
+  score       Float?   // 0-1 confidence
+  label       String?  // "yüksek potansiyel"
+  reason      String?
+  confidence  String?  // LOW | MEDIUM | HIGH
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, platform])
+}
+
+// --- Trend & Rakip (§94-§99) ---
+model TrendItem {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  brandId     String?
+  source      String   @default("DEMO") // DEMO | API | LICENSED
+  title       String
+  description String?
+  platform    String?
+  category    String?
+  relevance   Float    @default(0) // 0-1
+  freshness   Float    @default(0)
+  opportunity String?
+  data        String   @default("{}") // JSON raw
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([source])
+}
+
+model CompetitorProfile {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?  // which brand this competitor is compared to
+  name        String
+  handle      String?
+  platform    String?
+  website     String?
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contents CompetitorContent[]
+  insights CompetitorInsight[]
+
+  @@index([workspaceId])
+}
+
+model CompetitorContent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  competitorId String
+  platform    String?
+  externalId  String?
+  caption     String?
+  mediaUrl    String?
+  publishedAt DateTime?
+  metrics     String   @default("{}") // JSON likes/comments
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  competitor CompetitorProfile @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+}
+
+model CompetitorInsight {
+  id          String   @id @default(cuid())
+  workspaceId String
+  competitorId String
+  type        String   // GAP | STRENGTH | OPPORTUNITY
+  title       String
+  description String?
+  data        String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  competitor CompetitorProfile @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+}
+
+// --- Semantik Arama / Embeddings (§128-§131) ---
+model Embedding {
+  id          String   @id @default(cuid())
+  workspaceId String
+  entityType  String   // CONTENT | MEDIA | PRODUCT | CAMPAIGN
+  entityId    String
+  text        String?  // source text
+  vector      String   // JSON array (SQLite) — PG: vector type
+  model       String   @default("demo")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, entityType, entityId])
+  @@index([workspaceId, entityType])
+}
+
+// --- Campaign relation extension for Product ---
+// Note: Brand relation added via Product; CampaignOffer already links to campaignId
+model AnalyticsAnomaly {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String?
+  platform    String?
+  metric      String
+  date        DateTime
+  expected    Float?
+  actual      Float?
+  deviation   Float?
+  severity    String   @default("INFO")
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, date])
+}
+
+// Workspace settings extensions (if not already via AppSettings)
+// Feature flags are env + AppSettings; no extra model needed.
+
+// Add missing relation fields (prisma requires opposite side if relation defined)
+// These are additive and do not break existing data.
+

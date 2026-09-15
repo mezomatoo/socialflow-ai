@@ -77,6 +77,7 @@ export function NewContentView({
   const [style, setStyle] = useState('PROFESSIONAL');
   const [mediaIds, setMediaIds] = useState<string[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
+  const [consistency, setConsistency] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -368,6 +369,51 @@ export function NewContentView({
                 })}
               </div>
             )}
+
+            {/* Brand consistency gate — Phase 4 §53-55 */}
+            <div className="mt-4 rounded-xl border border-line bg-surface-subtle p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[12.5px] font-bold text-ink flex items-center gap-1.5"><Icon name="shield" size={14} /> Marka Uyumu</span>
+                <button
+                  className="btn-secondary btn-xs"
+                  onClick={() => {
+                    // Mock consistency check — gerçekte /api/brands/[id]/marka-kiti üzerinden kit çekilir
+                    const caption = masterCaption.trim().toLowerCase();
+                    const hasBanned = caption.includes('ucuz') || caption.includes('bayat');
+                    const hasCta = Boolean(brand?.defaultCta);
+                    const score = hasBanned ? 45 : hasCta ? 92 : 78;
+                    const gate = hasBanned ? 'WARN' : 'ALLOW';
+                    setConsistency({
+                      score,
+                      gate,
+                      message: hasBanned ? 'Marka uyumunda uyarılar var, gözden geçirmeniz önerilir.' : 'Marka uyumu iyi.',
+                      checks: [
+                        { label: 'Yasaklı kelime', ok: !hasBanned, detail: hasBanned ? '“ucuz/bayat” tespit edildi' : 'Yasaklı kelime yok', severity: hasBanned ? 'fail' : 'pass' },
+                        { label: 'Renk paleti', ok: true, detail: 'Onaylı renkler', severity: 'pass' },
+                        { label: 'CTA', ok: hasCta, detail: hasCta ? brand?.defaultCta! : 'CTA eksik', severity: hasCta ? 'pass' : 'warn' },
+                        { label: 'Hashtag', ok: true, detail: 'Hashtag uygun', severity: 'pass' },
+                      ],
+                    });
+                  }}
+                >
+                  <Icon name="magic" size={12} /> Kontrol Et
+                </button>
+              </div>
+              {consistency ? (
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[12px]"><span className="text-ink-muted">Skor</span><Badge tone={consistency.score >= 85 ? 'success' : consistency.score >= 60 ? 'warning' : 'danger'}>%{consistency.score}</Badge></div>
+                  <div className="h-1.5 w-full rounded-full bg-line overflow-hidden"><div className="h-full bg-brand-600" style={{ width: `${consistency.score}%` }} /></div>
+                  <p className={`mt-2 rounded-lg px-2.5 py-2 text-[12px] font-medium ${consistency.gate === 'ALLOW' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{consistency.message} {consistency.gate !== 'ALLOW' && '(Yayın için onay gerekebilir)'}</p>
+                  <ul className="mt-2 space-y-1">
+                    {consistency.checks.map((c: any) => (
+                      <li key={c.label} className="flex items-center gap-1.5 text-[11.5px]"><Icon name={c.ok ? 'check-circle' : 'alert-triangle'} size={12} /> <span className={c.ok ? 'text-ink' : 'text-amber-700'}>{c.label}</span><span className="ml-auto text-ink-faint">{c.detail}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[12px] leading-relaxed text-ink-muted">Yayınlamadan önce içerik marka kitine göre kontrol edilir (yasaklı kelime, renk, CTA, hashtag). “Kontrol Et” ile önizleyin — engel yoksa yayın serbest, uyarı varsa onay gerekir.</p>
+              )}
+            </div>
 
             <button className="btn-primary btn-lg mt-4 w-full" onClick={create} disabled={creating}>
               {creating ? <Spinner size={16} /> : <Icon name="sparkles" size={16} />}

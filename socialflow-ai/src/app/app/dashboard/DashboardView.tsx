@@ -7,6 +7,7 @@ import { Badge, EmptyState, StatusPill } from '@/components/ui';
 import { formatDate, formatNumber, formatRelative, formatTime } from '@/lib/format';
 import type { DashboardStats } from '@/lib/services/analyticsService';
 import type { Phase1Stats } from '@/lib/services/dashboardService';
+import type { AssistantItem } from '@/lib/ai/dailyAssistant';
 import { CONTENT_TYPE_LABELS } from '@/lib/platforms/platforms';
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
   recentFailures: { id: string; contentId: string; platform: string; contentType: string; lastError: string | null; updatedAt: string }[];
   user: { name: string; workspaceName: string; timezone: string };
   demoMode: boolean;
+  /** Faz 4 — AI Günlük Asistan: öncelikli görevler ve akıllı uyarılar. */
+  assistant?: { greeting: string; items: AssistantItem[]; actionCenter: AssistantItem[] } | null;
 }
 
 const AI_TYPE_LABELS: Record<string, string> = {
@@ -44,7 +47,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  * kapalıyken yayın metrikleri GÖSTERİLMEZ; bunun yerine modülün hangi fazda
  * geleceği dürüstçe yazılır.
  */
-export function DashboardView({ stats, publishingStats, onboarding, brands, accounts, recentFailures, user, demoMode }: Props) {
+export function DashboardView({ stats, publishingStats, onboarding, brands, accounts, recentFailures, user, demoMode, assistant }: Props) {
   const hour = new Date().getHours();
   const greeting = hour < 6 ? 'İyi geceler' : hour < 12 ? 'Günaydın' : hour < 18 ? 'İyi günler' : 'İyi akşamlar';
   const maxDist = Math.max(1, ...stats.platformDistribution.map((p) => p.count));
@@ -189,6 +192,44 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
           </Link>
         ))}
       </div>
+
+      {/* AI Günlük Asistan (Faz 4 entegrasyonu) */}
+      {assistant && assistant.items.length > 0 && (
+        <section className="card mt-5">
+          <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <div>
+              <h2 className="section-title flex items-center gap-2">
+                <Icon name="sparkles" size={16} className="text-brand-600" /> AI Günlük Asistan
+              </h2>
+              <p className="section-sub">{assistant.greeting}</p>
+            </div>
+            <Link href="/app/ai-asistan" className="btn-ghost btn-sm">
+              Asistana git <Icon name="arrowRight" size={14} />
+            </Link>
+          </header>
+          <ul className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2">
+            {assistant.actionCenter.slice(0, 6).map((item) => (
+              <li key={item.id} className="flex items-start gap-2.5 rounded-xl border border-line p-3">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-ink-muted">
+                  <Icon
+                    name={item.type === 'approval' ? 'check-circle' : item.type === 'warning' ? 'alert-triangle' : item.type === 'account' ? 'users' : 'calendar'}
+                    size={14}
+                  />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <strong className="block text-[13px] text-ink">{item.title}</strong>
+                  <span className="block text-[12px] text-ink-muted">{item.detail}</span>
+                  {item.actionRoute && item.actionLabel && (
+                    <Link href={item.actionRoute} className="mt-1 inline-block text-[12px] font-bold text-brand-600 hover:underline">
+                      {item.actionLabel} →
+                    </Link>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
         {/* Son içerikler */}

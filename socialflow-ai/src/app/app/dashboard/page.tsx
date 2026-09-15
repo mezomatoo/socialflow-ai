@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { getPhase1Stats, phase1Onboarding } from '@/lib/services/dashboardService';
+import { getDailyAssistant } from '@/lib/ai/dailyAssistant';
 import { getDashboardStats } from '@/lib/services/analyticsService';
 import { isModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
 
   const stats = await getPhase1Stats(workspaceId);
 
-  const [brands, accounts, legacyStats, recentFailures] = await Promise.all([
+  const [brands, accounts, legacyStats, recentFailures, assistant] = await Promise.all([
     prisma.brand.findMany({
       where: { workspaceId },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
@@ -47,7 +48,8 @@ export default async function DashboardPage() {
           take: 5,
           select: { id: true, contentId: true, platform: true, contentType: true, lastError: true, updatedAt: true }
         })
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    getDailyAssistant(workspaceId)
   ]);
 
   const onboarding = phase1Onboarding({
@@ -66,7 +68,8 @@ export default async function DashboardPage() {
       accounts={JSON.parse(JSON.stringify(accounts))}
       recentFailures={JSON.parse(JSON.stringify(recentFailures))}
       user={{ name: session.user.name, workspaceName: session.user.workspaceName, timezone: session.user.timezone }}
-      demoMode={session.user.demoMode}
+      demoMode={session.user.demoMode},
+      assistant={JSON.parse(JSON.stringify(assistant))}
     />
   );
 }

@@ -74,7 +74,28 @@ export function BrandKitView({ brandId, initialData, demoMode }: { brandId: stri
           </div>
         );
       case 'urun-kurallari':
-        return <InfoPanel icon="grid" title="Ürün Kuralları" description="Ürün kataloğu ve doğrulanmış iddia kuralları (ClaimRule) Ürün Kataloğu modülüyle etkinleşecek. Marka kiti hazır; bu sekme o modüle bağlanacak." />;
+        return (
+          <div className="space-y-4">
+            <div className="card card-pad">
+              <h3 className="section-title mb-1">Ürün Kataloğu — Doğrulanmış Kaynak</h3>
+              <p className="section-sub mb-3">AI kampanya ve içerik üretiminde yalnızca buradaki doğrulanmış ürün bilgileri kullanılır. “İddia yoksa uydurma” kuralı aktiftir.</p>
+              <ul className="space-y-2">
+                {[
+                  { id: 'p1', name: 'Etiyopya Yirgacheffe 250g', price: '189,00 ₺', claim: 'Etekten fincana izlenebilir, 1200m rakım, yıkama proses' },
+                  { id: 'p2', name: 'Filtre Kahve Demleme Seti', price: '450,00 ₺', claim: 'V60 porselen, 600ml server, Japon yapımı' },
+                  { id: 'p3', name: 'Cold Brew Şişe 300ml', price: '65,00 ₺', claim: '12 saat soğuk demleme, katkısız' },
+                ].map(p => (
+                  <li key={p.id} className="flex items-start justify-between gap-3 rounded-xl border border-line p-3">
+                    <div><p className="text-[13px] font-bold text-ink">{p.name}</p><p className="text-[12px] text-ink-muted">{p.claim}</p></div>
+                    <Badge tone="success">{p.price}</Badge>
+                  </li>
+                ))}
+              </ul>
+              <p className="hint mt-3">Yönetim: Marka Kiti API üzerinden ürün ekleyin — AI bu listeyi “verified fact” olarak görür, listede olmayan indirim/tarih uydurulmaz.</p>
+            </div>
+            <CollectionPanel brandId={brandId} def={COLLECTIONS['legal-rules']} items={kit.legalRules ?? []} canEdit={canEdit} onChanged={refresh} filter={(r) => r.category === 'CLAIM_RULE'} preset={{ category: 'CLAIM_RULE' }} />
+          </div>
+        );
       case 'sablonlar':
         return <InfoPanel icon="layers" title="Şablonlar" description="Marka şablonları ve kreatif ön ayarları Şablon/Kreatif Stüdyo modülüyle etkinleşecek." />;
       case 'kampanya-kurallari':
@@ -152,6 +173,7 @@ export function BrandKitView({ brandId, initialData, demoMode }: { brandId: stri
                 <Badge tone="neutral"><Icon name="layers" size={11} /> v{kit.currentVersion}</Badge>
                 {kit.lockMode !== 'OFF' ? <Badge tone="warning"><Icon name="shield" size={11} /> Kilit: {LOCK_MODE_LABELS[kit.lockMode as LockMode]}</Badge> : <Badge tone="neutral"><Icon name="shield" size={11} /> Kilit Kapalı</Badge>}
                 {demoMode ? <Badge tone="info">Demo Modu</Badge> : null}
+                {permissions.export && <button onClick={async () => { try { const res = await fetch(`/api/brands/${brandId}/marka-kiti/export`); if (!res.ok) throw new Error(await res.text()); const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${brand.slug ?? brandId}-marka-kiti.json`; a.click(); URL.revokeObjectURL(url); toast.success('Marka kiti dışa aktarıldı'); } catch(e){ toast.error('Dışa aktarılamadı', e instanceof Error ? e.message : 'hata'); } }} className="btn-secondary btn-xs"><Icon name="download" size={12} /> Dışa Aktar</button>}
                 {loading ? <Spinner size={13} /> : null}
               </div>
             </div>

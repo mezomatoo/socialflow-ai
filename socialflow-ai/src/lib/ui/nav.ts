@@ -59,7 +59,6 @@ export const NAV_GROUPS: { id: string; label: string; phase: NavPhase; items: Na
       { href: '/app/hesaplar', label: 'Sosyal Medya Hesapları', icon: 'users', group: 'phase2', phase: 'phase2' },
       { href: '/app/analizler', label: 'Analizler', icon: 'chart', group: 'phase2', phase: 'phase2' },
       { href: '/app/marka-kiti', label: 'Marka Kiti', icon: 'layers', group: 'phase2', phase: 'phase2' },
-      { href: '/app/ai-asistan', label: 'AI İçerik Asistanı', icon: 'sparkles', group: 'phase2', phase: 'phase2' },
       {
         href: '/app/bildirimler',
         label: 'Bildirimler',
@@ -83,6 +82,37 @@ export const NAV_GROUPS: { id: string; label: string; phase: NavPhase; items: Na
     items: [
       { href: '/app/reklamlar', label: 'Reklam Özeti', icon: 'chart', group: 'advertising', phase: 'phase2' },
       { href: '/app/reklamlar/hesaplar', label: 'Reklam Hesapları', icon: 'users', group: 'advertising', phase: 'phase2' }
+    ]
+  },
+  {
+    id: 'ai',
+    label: 'Yapay Zeka',
+    phase: 'phase2',
+    items: [
+      { href: '/app/ai-asistan', label: 'AI İçerik Asistanı', icon: 'sparkles', group: 'ai', phase: 'phase2' },
+      { href: '/app/ai-studio', label: 'AI Kreatif Stüdyo', icon: 'shapes', group: 'ai', phase: 'phase2' },
+      { href: '/app/ai-planlayici', label: 'AI İçerik Planlayıcı', icon: 'calendar', group: 'ai', phase: 'phase2' },
+      { href: '/app/ai-kampanya', label: 'AI Kampanya Oluşturucu', icon: 'target', group: 'ai', phase: 'phase2' },
+      { href: '/app/ai-gecmisi', label: 'AI Geçmişi', icon: 'history', group: 'ai', phase: 'phase2' }
+    ]
+  },
+  {
+    id: 'automation',
+    label: 'Otomasyon ve İçgörü',
+    phase: 'phase2',
+    items: [
+      { href: '/app/otomasyonlar', label: 'Otomasyonlar', icon: 'magic', group: 'automation', phase: 'phase2' },
+      { href: '/app/trendler', label: 'Trendler', icon: 'chart', group: 'automation', phase: 'phase2' },
+      { href: '/app/rakip-analizi', label: 'Rakip Analizi', icon: 'users', group: 'automation', phase: 'phase2' }
+    ]
+  },
+  {
+    id: 'insights',
+    label: 'Sistem',
+    phase: 'phase2',
+    items: [
+      { href: '/app/admin/ai-kullanim', label: 'AI Kullanımı', icon: 'chart', group: 'insights', phase: 'phase2' }
+    ]
     ]
   }
 ];
@@ -115,7 +145,15 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   '/ai-asistan': '/app/ai-asistan',
   '/ayarlar': '/app/ayarlar',
   '/marka-kiti': '/app/marka-kiti',
-  '/gelen-kutusu': '/app/gelen-kutusu'
+  '/gelen-kutusu': '/app/gelen-kutusu',
+  '/ai-studio': '/app/ai-studio',
+  '/ai-planlayici': '/app/ai-planlayici',
+  '/ai-kampanya': '/app/ai-kampanya',
+  '/ai-gecmisi': '/app/ai-gecmisi',
+  '/otomasyonlar': '/app/otomasyonlar',
+  '/trendler': '/app/trendler',
+  '/rakip-analizi': '/app/rakip-analizi',
+  '/admin/ai-kullanim': '/app/admin/ai-kullanim'
 };
 
 export function legacyRedirectFor(pathname: string): string | null {
