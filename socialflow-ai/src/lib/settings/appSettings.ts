@@ -33,17 +33,17 @@ export const DEFAULT_BRANDING: AppBranding = {
   fontFamily: 'Inter',
   defaultLanguage: 'tr',
   defaultTimezone: 'Europe/Istanbul',
-  demoBanner: true,
+  demoBanner: false,
   aiProvider: 'deterministic',
   aiModel: null,
-  demoMode: true
+  demoMode: false
 };
 
 export async function getAppBranding(workspaceId?: string | null): Promise<AppBranding> {
   if (!workspaceId) return { ...DEFAULT_BRANDING, demoMode: process.env.DEMO_MODE !== 'false' };
   const settings = await prisma.appSettings.findUnique({ where: { workspaceId } });
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { demoMode: true } });
-  if (!settings) return { ...DEFAULT_BRANDING, demoMode: workspace?.demoMode ?? true };
+  if (!settings) return { ...DEFAULT_BRANDING, demoMode: workspace?.demoMode ?? false };
   return {
     appName: settings.appName,
     logoMark: settings.logoMark,
@@ -58,7 +58,7 @@ export async function getAppBranding(workspaceId?: string | null): Promise<AppBr
     demoBanner: settings.demoBanner,
     aiProvider: settings.aiProvider,
     aiModel: settings.aiModel,
-    demoMode: workspace?.demoMode ?? true
+    demoMode: workspace?.demoMode ?? false
   };
 }
 

@@ -94,7 +94,7 @@ export default async function LoginPage() {
 
           <div className="mt-7">
             <Suspense fallback={<div className="skeleton h-64 w-full" />}>
-              <LoginForm demoUser={{ email: demoUser?.email ?? 'demo@socialflow.ai', password: '', appName: branding.appName }} />
+              <LoginForm demoUser={demoUser ? { email: demoUser.email, password: '', appName: branding.appName } : null} />
             </Suspense>
           </div>
         </div>

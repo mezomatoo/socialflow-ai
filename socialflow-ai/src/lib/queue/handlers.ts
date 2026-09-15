@@ -4,6 +4,8 @@ import { publishPlatformContent, rollupContentStatus } from '../social/publishin
 import prisma from '../prisma';
 import { env } from '../env';
 import { getProvider } from '../social/registry';
+import { runWithAiWorkspace } from '../ai/workspaceContext';
+import { warmProviderCredentials } from '../social/workspaceCredentials';
 import { fromCipherText, toCipherText } from '../crypto';
 import { notify } from '../services/notifications';
 import { audit } from '../security/audit';
@@ -54,10 +56,15 @@ async function handlePublishContentJob(job: any, payload: any) {
   }
 
   const workspace = await prisma.workspace.findUnique({ where: { id: pc.content.workspaceId } });
-  const result = await publishPlatformContent(platformContentId, {
-    workspaceId: pc.content.workspaceId,
-    userId: payload.userId ?? null,
-    demoMode: workspace?.demoMode ?? env.demoMode
+  // Worker'da istek bağlamı yoktur; sağlayıcı kimliklerinin çözülebilmesi için
+  // iş, çalışma alanı bağlamına sarılır ve kimlikler önden ısıtılır.
+  const result = await runWithAiWorkspace(pc.content.workspaceId, async () => {
+    await warmProviderCredentials(pc.content.workspaceId, pc.platform);
+    return publishPlatformContent(platformContentId, {
+      workspaceId: pc.content.workspaceId,
+      userId: payload.userId ?? null,
+      demoMode: workspace?.demoMode ?? env.demoMode
+    });
   });
 
   // Zamanlama kaydını güncelle
@@ -263,49 +270,53 @@ async function handleAnalyticsSyncJob(_job: any, payload: any) {
     return { skipped: true, reason: 'Demo modu — gerçek analitik verisi yok.' };
   }
 
-  const published = await prisma.platformContent.findMany({
-    where: { content: { workspaceId }, status: 'PUBLISHED', externalPostId: { not: null } },
-    include: { socialAccount: { include: { token: true } } },
-    take: 100
-  });
+  // Sağlayıcı kimlikleri çalışma alanı bağlamından çözülür.
+  return runWithAiWorkspace(workspaceId, async () => {
+    const published = await prisma.platformContent.findMany({
+      where: { content: { workspaceId }, status: 'PUBLISHED', externalPostId: { not: null } },
+      include: { socialAccount: { include: { token: true } } },
+      take: 100
+    });
 
-  let synced = 0;
-  for (const pc of published) {
-    if (!pc.socialAccount?.token || !pc.externalPostId) continue;
-    try {
-      const provider = getProvider(pc.platform);
-      const token = fromCipherText(pc.socialAccount.token.accessTokenEnc);
-      const stats = await provider.getAnalytics(pc.externalPostId, token);
-      if (!stats) continue;
-      const date = new Date(new Date().toISOString().slice(0, 10));
-      await prisma.analyticsSnapshot.create({
-        data: {
-          workspaceId,
-          platformContentId: pc.id,
-          contentId: pc.contentId,
-          brandId: null,
-          platform: pc.platform,
-          accountHandle: pc.socialAccount.handle,
-          date,
-          impressions: stats.impressions,
-          reach: stats.reach,
-          likes: stats.likes,
-          comments: stats.comments,
-          shares: stats.shares,
-          saves: stats.saves,
-          clicks: stats.clicks,
-          videoViews: stats.videoViews,
-          engagementRate: stats.engagementRate,
-          followerDelta: stats.followerDelta,
-          source: 'API'
-        }
-      });
-      synced++;
-    } catch (err) {
-      console.error('[AnalyticsSyncJob]', pc.id, err);
+    let synced = 0;
+    for (const pc of published) {
+      if (!pc.socialAccount?.token || !pc.externalPostId) continue;
+      try {
+        await warmProviderCredentials(workspaceId, pc.platform);
+        const provider = getProvider(pc.platform);
+        const token = fromCipherText(pc.socialAccount.token.accessTokenEnc);
+        const stats = await provider.getAnalytics(pc.externalPostId, token);
+        if (!stats) continue;
+        const date = new Date(new Date().toISOString().slice(0, 10));
+        await prisma.analyticsSnapshot.create({
+          data: {
+            workspaceId,
+            platformContentId: pc.id,
+            contentId: pc.contentId,
+            brandId: null,
+            platform: pc.platform,
+            accountHandle: pc.socialAccount.handle,
+            date,
+            impressions: stats.impressions,
+            reach: stats.reach,
+            likes: stats.likes,
+            comments: stats.comments,
+            shares: stats.shares,
+            saves: stats.saves,
+            clicks: stats.clicks,
+            videoViews: stats.videoViews,
+            engagementRate: stats.engagementRate,
+            followerDelta: stats.followerDelta,
+            source: 'API'
+          }
+        });
+        synced++;
+      } catch (err) {
+        console.error('[AnalyticsSyncJob]', pc.id, err);
+      }
     }
-  }
-  return { synced };
+    return { synced };
+  });
 }
 
 async function handleTokenRefreshJob(_job: any, payload: any) {

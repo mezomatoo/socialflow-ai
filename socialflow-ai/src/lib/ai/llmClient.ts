@@ -3,6 +3,8 @@ import {
   aiModeLabel as modeLabel,
   activeProviderName,
   getAiAdapter,
+  resolveAiAdapter,
+  resolveAiModeLabel,
   isExternalAiAvailable,
   parseJsonLoose,
   unavailableCapabilities
@@ -24,7 +26,7 @@ export { parseJsonLoose };
  * arayüz her iki durumda da aynı çalışır.
  */
 
-export type AiProvider = 'deterministic' | 'openai' | 'anthropic';
+export type AiProvider = 'deterministic' | 'openai' | 'anthropic' | 'gemini';
 
 export interface LlmRequest {
   system: string;
@@ -52,6 +54,11 @@ export function activeProvider(): AiProvider {
 
 export function aiModeLabel(): string {
   return modeLabel();
+}
+
+/** Çalışma alanı yapılandırmasını veritabanından çözerek görünen ad döndürür. */
+export function aiModeLabelAsync(): Promise<string> {
+  return resolveAiModeLabel();
 }
 
 /** Harici AI sağlayıcısı yapılandırılmış mı? */
@@ -88,7 +95,8 @@ export function consumeAiFailure(): AiFailureInfo | null {
 }
 
 export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null; result: LlmResult }> {
-  const adapter = getAiAdapter();
+  // Çalışma alanı bağlamında panoda kayıtlı sağlayıcı/anahtar çözülür.
+  const adapter = await resolveAiAdapter();
   lastAiFailure = null;
   const started = Date.now();
 

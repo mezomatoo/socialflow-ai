@@ -4,7 +4,8 @@ import { beginInstagramConnection } from '@/lib/social/instagramConnection';
 import { InstagramConnectionError } from '@/lib/social/instagramConnectionMessages';
 import { apiRoute, ok, fail, notFound } from '@/lib/api';
 import prisma from '@/lib/prisma';
-import { getProvider, isDemoProvider } from '@/lib/social/registry';
+import { getProvider } from '@/lib/social/registry';
+import { resolveProviderCredentials } from '@/lib/social/workspaceCredentials';
 import { createOAuthState } from '@/lib/social/oauth2';
 import { env } from '@/lib/env';
 import { audit } from '@/lib/security/audit';
@@ -23,13 +24,32 @@ export const POST = apiRoute(
 
     const platform = account.platform as PlatformCode;
 
-    if (session.user.demoMode || isDemoProvider(platform)) {
-      await audit({ workspaceId: session.user.workspaceId, userId: session.user.id, action: 'account.connect.demo', entityType: 'SocialAccount', entityId: params.id, request });
+    const creds = await resolveProviderCredentials(session.user.workspaceId, platform);
+
+    if (session.user.demoMode || !creds) {
+      await audit({
+        workspaceId: session.user.workspaceId,
+        userId: session.user.id,
+        action: session.user.demoMode ? 'account.connect.demo' : 'account.connect.simulated',
+        entityType: 'SocialAccount',
+        entityId: params.id,
+        request
+      });
+      // Kimlik bilgisi tanımlı olmayan platform bağlantısı simülasyon olarak
+      // ACTIVE'a çekilir; böylece içerik akışları kesintisiz çalışmaya devam eder.
+      if (account.connectionStatus !== 'ACTIVE') {
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: { connectionStatus: 'ACTIVE', lastValidatedAt: new Date() }
+        });
+      }
       return ok({
         demo: true,
         authorizeUrl: null,
-        message: `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`,
-        credentialsSet: Boolean(env.providers[platform]?.id && env.providers[platform]?.secret)
+        message: session.user.demoMode
+          ? `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`
+          : `${account.displayName} bağlandı. ${platform} için API kimlik bilgisi tanımlı olmadığından bağlantı simülasyon olarak tamamlandı; gerçek OAuth akışı için Ayarlar → Entegrasyonlar bölümünden kimlik bilgilerinizi tanımlayın.`,
+        credentialsSet: Boolean(creds)
       });
     }
 

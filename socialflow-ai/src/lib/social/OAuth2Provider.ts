@@ -7,6 +7,8 @@ import {
 } from './oauth2';
 import type { AccountProfile, TokenSet } from './types';
 import type { PlatformCode } from '../platforms/platforms';
+import { resolveProviderCredentialsNow } from './workspaceCredentials';
+import { currentAiWorkspaceId as currentWorkspaceId } from '../ai/workspaceContext';
 
 /**
  * OAuth2Provider — standart OAuth 2.0 yetkilendirme kodu akışını uygulayan
@@ -18,6 +20,15 @@ export abstract class OAuth2Provider extends BaseSocialProvider {
 
   /** Sağlayıcıya özgü OAuth yapılandırması. */
   protected abstract oauthConfig(): OAuthConfig;
+
+  /**
+   * OAuth istemci kimlik bilgileri — istek bağlamındaki çalışma alanının
+   * panodan girdiği kimlikler önceliklidir; yoksa ortam değişkenlerine düşülür.
+   */
+  protected resolveClientCredentials(): { clientId: string; clientSecret: string } {
+    const creds = resolveProviderCredentialsNow(currentWorkspaceId(), this.platform);
+    return { clientId: creds?.id ?? '', clientSecret: creds?.secret ?? '' };
+  }
 
   /** Kimlik bilgileri tanımlı değilse null döner. */
   protected isConfigured(): boolean {

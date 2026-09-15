@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -25,8 +24,8 @@ export class InstagramProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://www.facebook.com/v21.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v21.0/oauth/access_token',
-      clientId: env.providers.INSTAGRAM.id,
-      clientSecret: env.providers.INSTAGRAM.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: [...INSTAGRAM_PUBLISH_SCOPES],
       scopeSeparator: ',',
       extraAuthParams: { auth_type: 'rerequest' }

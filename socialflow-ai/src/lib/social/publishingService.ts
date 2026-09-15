@@ -1,5 +1,6 @@
 import prisma from '../prisma';
 import { getProvider } from '../social/registry';
+import { resolveProviderCredentials } from '../social/workspaceCredentials';
 import { getRule } from '../rules/ruleEngine';
 import { fromCipherText } from '../crypto';
 import { storage } from '../storage/storage';
@@ -69,6 +70,14 @@ export async function publishPlatformContent(
   const contentType = pc.contentType as ContentType;
   const label = pc.content.title || `${PLATFORM_META[platform]?.name ?? platform}`;
 
+  // Çalışma alanı Demo Modu'ndan çıkmış olsa bile platform için API kimlik
+  // bilgisi tanımlı değilse yayınlama kendiliğinden simülasyona döner
+  // (DemoProvider): gerçek OAuth token'ı yoktur ve sahte başarı üretilemez.
+  if (!ctx.demoMode) {
+    const creds = await resolveProviderCredentials(ctx.workspaceId, platform);
+    if (!creds) ctx = { ...ctx, demoMode: true };
+  }
+
   // Onay akışı açıksa
   if (pc.status === 'APPROVAL_PENDING') {
     return errorResult(platformContentId, 'Bu içerik onay bekliyor; onaylanmadan yayınlanamaz.', false, label, platform, contentType);
@@ -99,7 +108,7 @@ export async function publishPlatformContent(
       ok: true,
       status: 'PUBLISHED',
       message: existing.demoMode
-        ? 'Demo Modu — bu içerik daha önce simüle edilmişti; gerçek paylaşım yapılmadı.'
+        ? 'Bu içerik daha önce simülasyon olarak yayınlanmıştı; gerçek paylaşım yapılmadı. Çift gönderim engellendi.'
         : 'Bu içerik daha önce yayınlanmış. Çift gönderim engellendi.',
       retryable: false,
       demoMode: existing.demoMode,
@@ -314,7 +323,7 @@ export async function publishPlatformContent(
       title: `${PLATFORM_META[platform]?.name ?? platform} yayını başarılı`,
       message:
         result.demoMode || ctx.demoMode
-          ? `Demo Modu — ${rule.label} için gerçek sosyal medya paylaşımı yapılmadı.`
+          ? `Simülasyon — ${rule.label} için API kimlik bilgisi tanımlı olmadığından gerçek sosyal medya paylaşımı yapılmadı.`
           : `${rule.label} başarıyla yayınlandı.`,
       contentId: pc.contentId,
       actionLabel: result.permalink ? 'Gönderiyi Görüntüle' : 'İçeriği Aç',
@@ -341,7 +350,7 @@ export async function publishPlatformContent(
       status: 'PUBLISHED',
       message:
         result.demoMode || ctx.demoMode
-          ? 'Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.'
+          ? 'Simülasyon — API kimlik bilgisi tanımlı olmadığından gerçek sosyal medya paylaşımı yapılmadı.'
           : `${rule.label} yayınlandı.`,
       retryable: false,
       demoMode: Boolean(result.demoMode || ctx.demoMode),

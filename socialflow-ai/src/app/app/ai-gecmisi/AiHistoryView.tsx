@@ -5,8 +5,8 @@ import { Icon } from '@/components/ui/Icon';
 import { Badge } from '@/components/ui';
 
 const mockHistory = [
-  { id:'h1', service:'captionGeneration', prompt:'Yeni sezon kahve lansmanı', output:'Her yudumda bir hikâye...', brand:'Kahve Dükkanı', user:'Demo Kullanıcı', date:'2026-09-14 10:30', status:'DONE', liked: true },
-  { id:'h2', service:'imageGeneration', prompt:'Premium siyah arka plan kahve', output:'4 görsel üretildi', brand:'Kahve Dükkanı', user:'Demo Kullanıcı', date:'2026-09-14 09:15', status:'DONE', liked: false },
+  { id:'h1', service:'captionGeneration', prompt:'Yeni sezon kahve lansmanı', output:'Her yudumda bir hikâye...', brand:'Kahve Dükkanı', user:'Yönetici', date:'2026-09-14 10:30', status:'DONE', liked: true },
+  { id:'h2', service:'imageGeneration', prompt:'Premium siyah arka plan kahve', output:'4 görsel üretildi', brand:'Kahve Dükkanı', user:'Yönetici', date:'2026-09-14 09:15', status:'DONE', liked: false },
   { id:'h3', service:'contentPlanner', prompt:'Haftalık plan', output:'6 içerik önerisi', brand:'Aurora Tekstil', user:'Ayşe', date:'2026-09-13 16:00', status:'DONE', liked: null },
 ];
 
