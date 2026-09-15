@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { Badge, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toaster';
@@ -161,6 +162,9 @@ export function BrandsView({ items: initial, demoMode }: { items: BrandItem[]; d
                     </button>
                   )}
                   <div className="ml-auto flex items-center gap-1">
+                    <Link href={`/app/markalar/${b.id}`} className="btn-secondary btn-sm">
+                      <Icon name="eye" size={13} /> Marka Sesi
+                    </Link>
                     <button className="btn-secondary btn-sm" onClick={() => setEditing(b)}>
                       <Icon name="edit" size={13} /> Düzenle
                     </button>

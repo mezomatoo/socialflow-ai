@@ -2,8 +2,9 @@ import { apiRoute, ok } from '@/lib/api';
 import { listVersions } from '@/lib/services/contentService';
 
 /** Sürüm geçmişi */
-export const GET = apiRoute(async (_request, { params }) => {
-  const versions = await listVersions(params.id);
+export const GET = apiRoute(async (_request, { session, params }) => {
+  // Yalnızca kendi çalışma alanındaki içeriğin sürüm geçmişi okunur (§14).
+  const versions = await listVersions(params.id, session.user.workspaceId);
   return ok({
     items: versions.map((v) => ({
       id: v.id,

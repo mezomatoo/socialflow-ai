@@ -1,4 +1,5 @@
 import { isModuleEnabled } from '../phase/phaseGates';
+import { notFound } from '../errors';
 import prisma from '../prisma';
 import { getAllRules, type PlatformRuleView } from '../rules/ruleEngine';
 import { validateMediaForRule, checkSafeArea } from '../media/validate';
@@ -65,8 +66,9 @@ export async function runPreflight(
 ): Promise<PreflightReport> {
   // Yayınlama modülü kapalıysa (Faz 1) ön kontrol içerik odaklı çalışır.
   const phase1Mode = options.phase1Mode ?? !isModuleEnabled('socialPublishing');
-  const content = await prisma.content.findUnique({
-    where: { id: contentId },
+  // Çalışma alanı izolasyonu (§14): başka çalışma alanının içeriği doğrulanamaz.
+  const content = await prisma.content.findFirst({
+    where: { id: contentId, workspaceId },
     include: {
       media: { include: { media: true } },
       platformContents: {
@@ -76,7 +78,7 @@ export async function runPreflight(
       brand: true
     }
   });
-  if (!content) throw new Error('İçerik bulunamadı.');
+  if (!content) throw notFound('İçerik bulunamadı.');
 
   const rules = await getAllRules(workspaceId);
   const primaryMedia = content.media[0]?.media ?? null;

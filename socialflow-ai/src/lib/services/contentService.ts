@@ -7,6 +7,7 @@ import { audit } from '../security/audit';
 import { recordGeneration } from '../ai/generationLog';
 import { activeProviderName, getAiAdapter } from '../ai/provider';
 import { logger } from '../observability';
+import { AppError, notFound } from '../errors';
 import { charLength } from '../text';
 import { contentKey, PLATFORM_META, type ContentType, type PlatformCode } from '../platforms/platforms';
 import type { MediaVariant } from '../media/types';
@@ -401,12 +402,17 @@ export async function updatePlatformCaption(params: {
     where: { id: params.platformContentId },
     include: { content: true }
   });
-  if (!pc || pc.content.workspaceId !== params.workspaceId) throw new Error('İçerik bulunamadı.');
+  if (!pc || pc.content.workspaceId !== params.workspaceId) throw notFound('İçerik bulunamadı.');
 
   const limit = pc.charLimit || 2200;
   const used = charLength(params.caption);
   if (used > limit) {
-    throw new Error(`Açıklama ${used} karakter; bu platformun sınırı ${limit} karakter. Lütfen metni kısaltın.`);
+    // Metin ASLA kesilmez; kullanıcıya ne yapacağı söylenir (§36, §68).
+    throw new AppError('PLATFORM_RULE_VIOLATION', `Açıklama ${used} karakter; bu platformun sınırı ${limit} karakter. Lütfen metni kısaltın.`, {
+      status: 422,
+      details: { used, limit, platform: pc.platform },
+      recoverable: true
+    });
   }
 
   const updated = await prisma.platformContent.update({
@@ -420,6 +426,15 @@ export async function updatePlatformCaption(params: {
       firstComment: params.firstComment !== undefined ? params.firstComment : pc.firstComment,
       updatedAt: new Date()
     }
+  });
+
+  await audit({
+    workspaceId: params.workspaceId,
+    userId: params.userId ?? null,
+    action: 'platform_content.manual_edit',
+    entityType: 'PlatformContent',
+    entityId: params.platformContentId,
+    metadata: { platform: pc.platform, contentType: pc.contentType, characters: used }
   });
 
   return updated;
@@ -454,7 +469,15 @@ export async function restoreOriginalCaption(platformContentId: string, workspac
   });
 }
 
-/** Master açıklama güncellendiğinde sürüm kaydı oluşturur. */
+/**
+ * Otomatik kaydetme birleştirme penceresi: kullanıcı aynı düzenleme oturumunda
+ * saniyeler içinde birçok kez yazdığı için her tuş duraklamasında yeni sürüm
+ * satırı oluşturmak geçmişi kullanılamaz hale getirir. Bu pencere içindeki
+ * otomatik kayıtlar TEK kontrol noktasında birleştirilir (§28, §29).
+ */
+const AUTOSAVE_COALESCE_MS = 10 * 60 * 1000;
+
+/** Master açıklama güncellendiğinde sürüm kontrol noktası oluşturur (birleştirmeli). */
 export async function updateMasterCaption(params: {
   contentId: string;
   workspaceId: string;
@@ -465,8 +488,8 @@ export async function updateMasterCaption(params: {
   defaultStyle?: string;
   userId?: string | null;
 }) {
-  const content = await prisma.content.findUnique({ where: { id: params.contentId } });
-  if (!content || content.workspaceId !== params.workspaceId) throw new Error('İçerik bulunamadı.');
+  const content = await prisma.content.findFirst({ where: { id: params.contentId, workspaceId: params.workspaceId } });
+  if (!content) throw notFound('İçerik bulunamadı.');
 
   const nextVersion = content.version + 1;
   const updated = await prisma.content.update({
@@ -482,31 +505,67 @@ export async function updateMasterCaption(params: {
     }
   });
 
-  await prisma.contentVersion.create({
-    data: {
-      contentId: params.contentId,
-      version: nextVersion,
-      kind: 'MANUAL',
-      note: 'Ana açıklama kullanıcı tarafından güncellendi',
-      payload: JSON.stringify({ masterCaption: params.masterCaption, storyText: updated.storyText }),
-      createdById: params.userId ?? null
-    }
+  // Sürüm kontrol noktası: aynı oturumdaki otomatik kayıtlar birleştirilir.
+  const latest = await prisma.contentVersion.findFirst({
+    where: { contentId: params.contentId },
+    orderBy: { version: 'desc' }
+  });
+  const payload = JSON.stringify({ masterCaption: params.masterCaption, storyText: updated.storyText });
+  const coalesce =
+    latest &&
+    latest.kind === 'AUTOSAVE' &&
+    Date.now() - new Date(latest.createdAt).getTime() < AUTOSAVE_COALESCE_MS;
+
+  if (coalesce) {
+    await prisma.contentVersion.update({
+      where: { id: latest!.id },
+      data: { payload, note: 'Otomatik kaydetme (düzenleme oturumu)' }
+    });
+  } else {
+    await prisma.contentVersion.create({
+      data: {
+        contentId: params.contentId,
+        version: nextVersion,
+        kind: 'AUTOSAVE',
+        note: 'Otomatik kaydetme',
+        payload,
+        createdById: params.userId ?? null
+      }
+    });
+  }
+
+  await audit({
+    workspaceId: params.workspaceId,
+    userId: params.userId ?? null,
+    action: 'content.autosave',
+    entityType: 'Content',
+    entityId: params.contentId,
+    metadata: { version: nextVersion, coalesced: Boolean(coalesce) }
   });
 
   return updated;
 }
 
-export async function listVersions(contentId: string) {
+/**
+ * Sürüm geçmişi. Çalışma alanı ZORUNLUDUR: geçmiş, başka bir çalışma alanının
+ * içeriği için okunamaz (§14).
+ */
+export async function listVersions(contentId: string, workspaceId?: string) {
+  if (workspaceId) {
+    const owned = await prisma.content.findFirst({ where: { id: contentId, workspaceId }, select: { id: true } });
+    if (!owned) throw notFound('İçerik bulunamadı.');
+  }
   return prisma.contentVersion.findMany({ where: { contentId }, orderBy: { version: 'desc' } });
 }
 
 /** Sürüme geri dön. */
 export async function restoreVersion(contentId: string, version: number, workspaceId: string) {
+  const content = await prisma.content.findFirst({ where: { id: contentId, workspaceId } });
+  if (!content) throw notFound('İçerik bulunamadı.');
+
   const v = await prisma.contentVersion.findFirst({ where: { contentId, version } });
-  if (!v) throw new Error('Sürüm bulunamadı.');
+  if (!v) throw notFound('Sürüm bulunamadı.');
   const payload = JSON.parse(v.payload || '{}');
-  const content = await prisma.content.findUnique({ where: { id: contentId } });
-  if (!content || content.workspaceId !== workspaceId) throw new Error('İçerik bulunamadı.');
 
   const nextVersion = content.version + 1;
   await prisma.content.update({
