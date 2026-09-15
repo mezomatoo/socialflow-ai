@@ -359,31 +359,50 @@ export async function generateStudioImages(input: StudioGenerateInput): Promise<
       const buf = Buffer.from(img.svg, 'utf8');
       const slugBase = (input.prompt.trim().slice(0, 24) || 'kreatif').toLowerCase().replace(/[^a-z0-9ğüşiöçı]+/gi, '-').replace(/^-+|-+$/g, '') || 'kreatif';
       const filename = `${slugBase}-${img.layout.toLowerCase()}-${ratio.replace(':', 'x')}.svg`;
-      const storageKey = makeStorageKey(input.workspaceId, 'ai-studio', filename);
-      const stored = await storage().put(storageKey, buf, 'image/svg+xml');
       const hash = hashPrompt(buf.toString('utf8')).slice(0, 32);
 
-      const asset = await prisma.mediaAsset.create({
-        data: {
-          workspaceId: input.workspaceId,
-          brandId: input.brandId,
-          kind: 'IMAGE',
-          filename,
-          originalName: `AI Stüdyo — ${input.prompt.trim().slice(0, 40)}`,
-          storageKey,
-          publicUrl: stored.publicUrl,
-          mimeType: 'image/svg+xml',
-          format: 'svg',
-          bytes: buf.length,
-          width: w,
-          height: h,
-          aspectRatio: w / h,
-          contentHash: hash,
-          tags: 'ai-studio',
-          status: 'READY',
-          createdBy: input.userId
-        }
+      // Özdeş üretim tekilleştirme: aynı çalışma alanında aynı içerik hash'i
+      // zaten varsa yeni MediaAsset OLUŞTURULMAZ (P2002 yerine dürüst yeniden
+      // kullanım — orijinal varlık dokunulmaz, yeni MasterCreative aynı
+      // çıktıya bağlanır; sahte çoğaltma yapılmaz).
+      const existingAsset = await prisma.mediaAsset.findFirst({
+        where: { workspaceId: input.workspaceId, contentHash: hash },
+        select: { id: true, storageKey: true, publicUrl: true }
       });
+
+      let asset: { id: string };
+      let storageKey: string;
+      let publicUrl: string | null;
+      if (existingAsset) {
+        asset = existingAsset;
+        storageKey = existingAsset.storageKey;
+        publicUrl = existingAsset.publicUrl;
+      } else {
+        storageKey = makeStorageKey(input.workspaceId, 'ai-studio', filename);
+        const stored = await storage().put(storageKey, buf, 'image/svg+xml');
+        publicUrl = stored.publicUrl;
+        asset = await prisma.mediaAsset.create({
+          data: {
+            workspaceId: input.workspaceId,
+            brandId: input.brandId,
+            kind: 'IMAGE',
+            filename,
+            originalName: `AI Stüdyo — ${input.prompt.trim().slice(0, 40)}`,
+            storageKey,
+            publicUrl: stored.publicUrl,
+            mimeType: 'image/svg+xml',
+            format: 'svg',
+            bytes: buf.length,
+            width: w,
+            height: h,
+            aspectRatio: w / h,
+            contentHash: hash,
+            tags: 'ai-studio',
+            status: 'READY',
+            createdBy: input.userId
+          }
+        });
+      }
 
       // 3) Marka tutarlılığı (§70-§71)
       const consistency = checkBrandConsistency({
@@ -409,7 +428,7 @@ export async function generateStudioImages(input: StudioGenerateInput): Promise<
           brandId: input.brandId,
           title: `${input.prompt.trim().slice(0, 60)} — ${LAYOUT_LABELS[img.layout]}`,
           storageKey,
-          fileUrl: stored.publicUrl,
+          fileUrl: publicUrl,
           width: w,
           height: h,
           aspectRatio: ratio,
@@ -435,7 +454,7 @@ export async function generateStudioImages(input: StudioGenerateInput): Promise<
 
       await prisma.aiImageGeneration.update({
         where: { id: generation.id },
-        data: { status: 'DONE', resultUrl: stored.publicUrl, resultKey: storageKey, costUSD: estimateCost('imageGeneration', 1) }
+        data: { status: 'DONE', resultUrl: publicUrl, resultKey: storageKey, costUSD: estimateCost('imageGeneration', 1) }
       });
 
       // 6) İz + kullanım kayıtları (hatada ana akış bozulmaz)
@@ -468,7 +487,7 @@ export async function generateStudioImages(input: StudioGenerateInput): Promise<
         generationId: generation.id,
         masterId: master.id,
         mediaAssetId: asset.id,
-        url: stored.publicUrl,
+        url: publicUrl,
         width: w,
         height: h,
         aspectRatio: ratio,
