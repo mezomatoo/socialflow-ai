@@ -4,13 +4,17 @@ import prisma from '@/lib/prisma';
 import { AiPlannerView } from './AiPlannerView';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'AI İçerik Planlayıcı' };
+export const metadata = { title: 'AI Planlayıcı' };
 
 export default async function Page() {
   const session = await getSession();
   if (!session) redirect('/giris');
   const ws = session.user.workspaceId;
-  const brands: any[] = await prisma.brand.findMany({ where: { workspaceId: ws }, orderBy: { name: 'asc' } }).catch(()=> []);
-  const safe = brands.length ? brands : [{ id: 'demo-brand-id', name: 'Kahve Dükkanı' }, { id: 'demo-brand2-id', name: 'Aurora Tekstil' }];
-  return <AiPlannerView brands={JSON.parse(JSON.stringify(safe))} demoMode={session.user.demoMode} />;
+
+  const [brands, campaigns] = await Promise.all([
+    prisma.brand.findMany({ where: { workspaceId: ws }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.campaign.findMany({ where: { workspaceId: ws }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, name: true } })
+  ]);
+
+  return <AiPlannerView brands={brands} campaigns={campaigns} demoMode={session.user.demoMode} />;
 }
