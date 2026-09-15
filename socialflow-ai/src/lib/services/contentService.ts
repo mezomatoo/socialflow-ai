@@ -1,8 +1,12 @@
 import prisma from '../prisma';
+import { env } from '../env';
 import { adaptCaption } from '../ai/captionAdaptationService';
 import { getRule, getAllRules } from '../rules/ruleEngine';
 import { notify } from './notifications';
 import { audit } from '../security/audit';
+import { recordGeneration } from '../ai/generationLog';
+import { activeProviderName, getAiAdapter } from '../ai/provider';
+import { logger } from '../observability';
 import { charLength } from '../text';
 import { contentKey, PLATFORM_META, type ContentType, type PlatformCode } from '../platforms/platforms';
 import type { MediaVariant } from '../media/types';
@@ -179,6 +183,10 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
     skipped?: boolean;
   }[] = [];
 
+  /** AI sağlayıcısı en az bir kez başarısız oldu mu? (arayüz kullanıcıyı uyarır) */
+  let aiFailed = false;
+  let aiErrorCode: string | null = null;
+
   const rules = await getAllRules(input.workspaceId);
 
   for (const t of targets) {
@@ -223,6 +231,8 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
       continue;
     }
 
+    const startedAt = Date.now();
+    const providerName = activeProviderName();
     const out = await adaptCaption({
       masterCaption: content.masterCaption,
       platform: t.platform,
@@ -257,6 +267,31 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
         : null
     });
 
+    // Yapay zekâ üretimi kaydı (§39) — gizli bilgi saklanmaz, yalnızca özet.
+    await recordGeneration({
+      workspaceId: input.workspaceId,
+      contentId: content.id,
+      brandId: content.brandId,
+      userId: input.userId ?? null,
+      type: 'ADAPT_CAPTION',
+      provider: providerName,
+      model: providerName === 'openai' ? env.ai.openaiModel : providerName === 'anthropic' ? env.ai.anthropicModel : null,
+      platform: t.platform,
+      contentType: t.contentType,
+      prompt: `${content.masterCaption}\n---\n${rule.platform}:${rule.contentType}`,
+      status: out.engine === 'LLM' ? 'SUCCESS' : 'SKIPPED',
+      errorCode: out.engine === 'LLM' ? null : 'LOCAL_ENGINE',
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        engine: out.engine,
+        shortened: out.shortened,
+        truncated: out.truncated,
+        warnings: out.warnings.length,
+        ruleVersion: rule.version,
+        missingTerms: out.missingTerms
+      }
+    });
+
     await prisma.platformContent.update({
       where: { id: t.id },
       data: {
@@ -274,6 +309,8 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
         targetHeight: null,
         safeAreaOk: true,
         lastError: out.warnings[0] ?? null,
+        // Üretimde kullanılan kural sürümü saklanır (§11).
+        platformRuleVersion: rule.version,
         updatedAt: new Date()
       }
     });
@@ -325,7 +362,23 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
     metadata: { targets: results.length, version: nextVersion }
   });
 
-  return { version: nextVersion, results };
+  // AI sağlayıcısı yapılandırılmış ama başarısız olduysa kullanıcı bilgilendirilir
+  // ve metinler elle düzenlemeye AÇIK kalır (§69).
+  if (aiFailed) {
+    logger.warn({
+      event: 'ai.adapt_degraded',
+      workspaceId: input.workspaceId,
+      contentId: content.id,
+      code: aiErrorCode,
+      targets: results.length
+    });
+  }
+
+  const aiNotice = aiFailed
+    ? 'AI servisine şu anda ulaşılamıyor. Metinler yerel motorla uyarlandı; dilediğiniz platformu elle düzenleyebilirsiniz.'
+    : null;
+
+  return { version: nextVersion, results, aiNotice, aiProvider: activeProviderName() };
 }
 
 /** Kullanıcı bir platform metnini elle düzenlediğinde. */

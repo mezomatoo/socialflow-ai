@@ -1,5 +1,7 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
 import { saveVariant, parseVariants } from '@/lib/services/mediaService';
+import { listMediaVariants } from '@/lib/services/mediaProcessingService';
+import { notFound } from '@/lib/errors';
 import prisma from '@/lib/prisma';
 import { safeJson } from '@/lib/services/mediaSerializer';
 
@@ -13,7 +15,7 @@ export const POST = apiRoute(
     const blob = form.get('blob');
     if (!(blob instanceof Blob)) return badRequest('Varyant dosyası gönderilmedi.');
     const asset = await prisma.mediaAsset.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
-    if (!asset) return badRequest('Medya bulunamadı.');
+    if (!asset) throw notFound('Medya bulunamadı.');
 
     const buf = Buffer.from(await blob.arrayBuffer());
     const saved = await saveVariant({
@@ -31,7 +33,14 @@ export const POST = apiRoute(
       focalPoint: safeJson(form.get('focalPoint'))
     });
 
-    return ok({ storageKey: saved.storageKey, publicUrl: saved.publicUrl, derivatives: parseVariants(saved.asset.derivatives) });
+    // Türev MEDIAVARIANT kaydı olarak da izlenir (§43) — orijinal değişmez (§42).
+    const variants = await listMediaVariants(session.user.workspaceId, params.id);
+    return ok({
+      storageKey: saved.storageKey,
+      publicUrl: saved.publicUrl,
+      derivatives: parseVariants(saved.asset.derivatives),
+      variant: variants.find((v) => v.platform === String(form.get('platform') ?? '') && v.contentType === String(form.get('contentType') ?? '')) ?? null
+    });
   },
   { limit: 120 }
 );

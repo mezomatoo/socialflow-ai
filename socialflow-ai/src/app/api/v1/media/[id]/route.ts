@@ -1,5 +1,7 @@
-import { apiRoute, ok, badRequest } from '@/lib/api';
+import { apiRoute, ok } from '@/lib/api';
 import { deleteMedia, updateFocalPoint, parseVariants, parseFocalPoint, parseAnalysis } from '@/lib/services/mediaService';
+import { mediaUsage, listMediaVariants } from '@/lib/services/mediaProcessingService';
+import { notFound } from '@/lib/errors';
 import prisma from '@/lib/prisma';
 
 export const GET = apiRoute(async (_request, { session, params }) => {
@@ -7,12 +9,19 @@ export const GET = apiRoute(async (_request, { session, params }) => {
     where: { id: params.id, workspaceId: session.user.workspaceId },
     include: { brand: { select: { id: true, name: true } } }
   });
-  if (!asset) return badRequest('Medya bulunamadı.');
+  if (!asset) throw notFound('Medya bulunamadı.');
+  const [variants, usage] = await Promise.all([
+    listMediaVariants(session.user.workspaceId, asset.id),
+    mediaUsage(session.user.workspaceId, asset.id)
+  ]);
   return ok({
     ...asset,
     focalPoint: parseFocalPoint(asset.focalPoint),
     analysis: parseAnalysis(asset.analysis),
     derivatives: parseVariants(asset.derivatives),
+    // Türevler artık birinci sınıf kayıt (§43) — orijinal değişmez (§42).
+    variants,
+    usage,
     tags: asset.tags.split(',').filter(Boolean)
   });
 });
@@ -37,13 +46,11 @@ export const PATCH = apiRoute(
 );
 
 export const DELETE = apiRoute(
-  async (_request, { session, params }) => {
-    try {
-      await deleteMedia(params.id, session.user.workspaceId);
-      return ok({ deleted: true });
-    } catch (err) {
-      return badRequest(err instanceof Error ? err.message : 'Medya silinemedi.');
-    }
+  async (request, { session, params }) => {
+    // Aktif referans varsa 409 döner (AppError → apiRoute eşlemesi).
+    const force = new URL(request.url).searchParams.get('force') === '1';
+    const result = await deleteMedia(params.id, session.user.workspaceId, { force });
+    return ok(result);
   },
   { limit: 30 }
 );

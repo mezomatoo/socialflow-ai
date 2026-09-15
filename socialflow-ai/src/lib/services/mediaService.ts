@@ -1,6 +1,9 @@
 import prisma from '../prisma';
 import { storage, makeStorageKey } from '../storage/storage';
 import { sha256 } from '../crypto';
+import { audit } from '../security/audit';
+import { AppError, notFound } from '../errors';
+import { mediaUsage } from './mediaProcessingService';
 import type { MediaVariant, FocalPoint, MediaAnalysis } from '../media/types';
 
 /**
@@ -134,6 +137,52 @@ export async function saveVariant(input: VariantUploadInput) {
     data: { derivatives: JSON.stringify(variants) }
   });
 
+  // MediaVariant kaydı (§43): türev, orijinalden bağımsız izlenebilir bir varlık
+  // olarak da saklanır. Orijinal dosya değişmez (§42).
+  await prisma.mediaVariant
+    .upsert({
+      where: {
+        mediaAssetId_platform_contentType_aspectRatio: {
+          mediaAssetId: asset.id,
+          platform: input.platform,
+          contentType: input.contentType,
+          aspectRatio: input.ratio
+        }
+      },
+      update: {
+        storageKey,
+        publicUrl: stored.publicUrl,
+        mimeType: input.mimeType,
+        width: input.width,
+        height: input.height,
+        bytes: buf.length,
+        focalPoint: input.focalPoint ? JSON.stringify(input.focalPoint) : null,
+        cropMode: input.method === 'MANUAL' ? 'MANUAL' : 'SMART',
+        processingStatus: 'READY',
+        processingMetadata: JSON.stringify({ crop: input.crop ?? null, sourceKey: asset.storageKey })
+      },
+      create: {
+        mediaAssetId: asset.id,
+        workspaceId: input.workspaceId,
+        platform: input.platform,
+        contentType: input.contentType,
+        aspectRatio: input.ratio,
+        kind: 'CROP',
+        storageKey,
+        publicUrl: stored.publicUrl,
+        mimeType: input.mimeType,
+        width: input.width,
+        height: input.height,
+        bytes: buf.length,
+        focalPoint: input.focalPoint ? JSON.stringify(input.focalPoint) : null,
+        cropMode: input.method === 'MANUAL' ? 'MANUAL' : 'SMART',
+        processingMethod: input.focalPoint ? 'USER_FOCAL_POINT' : 'DETERMINISTIC',
+        processingStatus: 'READY',
+        processingMetadata: JSON.stringify({ crop: input.crop ?? null, sourceKey: asset.storageKey })
+      }
+    })
+    .catch(() => undefined);
+
   return { asset: updated, storageKey, publicUrl: stored.publicUrl };
 }
 
@@ -170,20 +219,47 @@ export async function listMedia(
   return items;
 }
 
-export async function deleteMedia(mediaId: string, workspaceId: string) {
+/**
+ * Medyayı siler. Silme ÖNCESİ aktif referans kontrolü yapılır (§87):
+ * yayında/planlı/taslak bir içerik bu medyayı kullanıyorsa silme reddedilir.
+ * Arşivlenmiş içeriklerdeki referanslar silmeyi engellemez.
+ */
+export async function deleteMedia(mediaId: string, workspaceId: string, options: { force?: boolean } = {}) {
   const asset = await prisma.mediaAsset.findFirst({ where: { id: mediaId, workspaceId } });
-  if (!asset) throw new Error('Medya bulunamadı.');
+  if (!asset) throw notFound('Medya bulunamadı.');
 
-  const inUse = await prisma.contentMedia.count({ where: { mediaId } });
-  if (inUse > 0) {
-    throw new Error('Bu medya bir içerikte kullanılıyor. Önce ilgili içerikten kaldırın.');
+  const usage = await mediaUsage(workspaceId, mediaId);
+  if (!usage.safeToDelete && !options.force) {
+    throw new AppError(
+      'CONFLICT',
+      `Bu medya ${usage.activeReferences} aktif içerikte kullanılıyor. Silmek yerine içeriklerden kaldırın veya arşivleyin.`,
+      { status: 409, details: usage }
+    );
   }
 
-  const variants = parseVariants(asset.derivatives);
-  await storage().delete(asset.storageKey);
-  for (const v of variants) if (v.storageKey) await storage().delete(v.storageKey).catch(() => undefined);
-  await prisma.mediaAsset.delete({ where: { id: mediaId } });
-  return { deleted: true };
+  const variants = await prisma.mediaVariant.findMany({ where: { workspaceId, mediaAssetId: mediaId } });
+  const legacyVariants = parseVariants(asset.derivatives);
+
+  await prisma.$transaction([
+    prisma.mediaVariant.deleteMany({ where: { workspaceId, mediaAssetId: mediaId } }),
+    prisma.contentMedia.deleteMany({ where: { mediaId } }),
+    prisma.mediaAsset.delete({ where: { id: mediaId } })
+  ]);
+
+  // Depolama temizliği (orijinal + tüm türevler) — dosya silinemezse akış bozulmaz.
+  await storage().delete(asset.storageKey).catch(() => undefined);
+  for (const v of variants) await storage().delete(v.storageKey).catch(() => undefined);
+  for (const v of legacyVariants) if (v.storageKey) await storage().delete(v.storageKey).catch(() => undefined);
+
+  await audit({
+    workspaceId,
+    action: 'media.deleted',
+    entityType: 'MediaAsset',
+    entityId: mediaId,
+    metadata: { originalName: asset.originalName, variants: variants.length }
+  });
+
+  return { deleted: true, variants: variants.length };
 }
 
 export function parseVariants(raw: string | null | undefined): MediaVariant[] {

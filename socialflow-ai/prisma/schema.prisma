@@ -1255,10 +1255,12 @@ model MediaVariant {
   id           String   @id @default(cuid())
   mediaAssetId String
   workspaceId  String
-  platform     String? // PlatformCode (genel varyantlar için boş olabilir)
-  contentType  String? // ContentType
+  // NULL yerine boş dize: SQLite'ta NULL değerler benzersizlik kısıtında
+  // birbirinden farklı sayılır; tekilleştirme için "" kullanılır.
+  platform     String   @default("") // PlatformCode (genel varyantlar için "")
+  contentType  String   @default("") // ContentType
   kind         String   @default("CROP") // CROP | SCALE | THUMBNAIL | COVER | VIDEO_POSTER
-  aspectRatio  String? // "1:1" | "4:5" | "9:16" | "16:9"
+  aspectRatio  String   @default("") // "1:1" | "4:5" | "9:16" | "16:9"
   storageKey   String
   publicUrl    String?
   mimeType     String
