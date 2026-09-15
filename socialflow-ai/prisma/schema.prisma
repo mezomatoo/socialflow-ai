@@ -103,6 +103,7 @@ model Workspace {
 
   @@index([slug])
   adAccounts AdAccount[]
+  products Product[]
 
 }
 
@@ -168,6 +169,7 @@ model Brand {
   @@unique([workspaceId, id])
 
   adAccounts AdAccount[]
+  products Product[]
 
 }
 
@@ -1362,4 +1364,58 @@ model AdProviderCapability {
   account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
   @@unique([adAccountId, version])
   @@index([workspaceId, adAccountId, createdAt])
+}
+
+// Central product truth. No provider catalog or second commerce product model.
+model Product {
+  id String @id @default(cuid())
+  workspaceId String
+  brandId String
+  name String
+  description String @default("")
+  status String @default("ACTIVE")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  variants ProductVariant[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, brandId, status])
+}
+
+model ProductVariant {
+  id String @id @default(cuid())
+  workspaceId String
+  productId String
+  sku String
+  name String
+  // Integer minor units; null means unknown, not free. Currency scale is stored.
+  priceMinor Int?
+  currency String
+  currencyScale Int
+  stock Int?
+  version Int @default(1)
+  source String @default("USER_PROVIDED")
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [workspaceId, productId], references: [workspaceId, id], onDelete: Restrict)
+  inventory InventoryMovement[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId, productId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  workspaceId String
+  variantId String
+  fromStock Int?
+  toStock Int
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  variant ProductVariant @relation(fields: [workspaceId, variantId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, variantId, createdAt])
 }
