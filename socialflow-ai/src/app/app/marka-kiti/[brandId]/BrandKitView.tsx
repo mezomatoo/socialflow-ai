@@ -27,7 +27,7 @@ function scoreTone(s: number): 'danger' | 'warning' | 'success' {
   return s >= 80 ? 'success' : s >= 45 ? 'warning' : 'danger';
 }
 
-export function BrandKitView({ brandId, initialData, demoMode }: { brandId: string; initialData: Data; demoMode: boolean }) {
+export function BrandKitView({ brandId, initialData }: { brandId: string; initialData: Data }) {
   const toast = useToast();
   const [data, setData] = useState<Data>(initialData);
   const [tab, setTab] = useState<string>(BRAND_KIT_TABS[0].id);
@@ -172,7 +172,6 @@ export function BrandKitView({ brandId, initialData, demoMode }: { brandId: stri
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">
                 <Badge tone="neutral"><Icon name="layers" size={11} /> v{kit.currentVersion}</Badge>
                 {kit.lockMode !== 'OFF' ? <Badge tone="warning"><Icon name="shield" size={11} /> Kilit: {LOCK_MODE_LABELS[kit.lockMode as LockMode]}</Badge> : <Badge tone="neutral"><Icon name="shield" size={11} /> Kilit Kapalı</Badge>}
-                {demoMode ? <Badge tone="info">Demo Modu</Badge> : null}
                 {permissions.export && <button onClick={async () => { try { const res = await fetch(`/api/brands/${brandId}/marka-kiti/export`); if (!res.ok) throw new Error(await res.text()); const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${brand.slug ?? brandId}-marka-kiti.json`; a.click(); URL.revokeObjectURL(url); toast.success('Marka kiti dışa aktarıldı'); } catch(e){ toast.error('Dışa aktarılamadı', e instanceof Error ? e.message : 'hata'); } }} className="btn-secondary btn-xs"><Icon name="download" size={12} /> Dışa Aktar</button>}
                 {loading ? <Spinner size={13} /> : null}
               </div>

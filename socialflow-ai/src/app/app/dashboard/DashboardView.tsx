@@ -20,7 +20,6 @@ interface Props {
   accounts: { id: string; platform: string; handle: string; displayName: string; connectionStatus: string; demoAccount: boolean }[];
   recentFailures: { id: string; contentId: string; platform: string; contentType: string; lastError: string | null; updatedAt: string }[];
   user: { name: string; workspaceName: string; timezone: string };
-  demoMode: boolean;
   /** AI Günlük Asistan: öncelikli görevler ve akıllı uyarılar. */
   assistant?: { greeting: string; items: AssistantItem[]; actionCenter: AssistantItem[] } | null;
 }
@@ -47,7 +46,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  * kapalıyken yayın metrikleri GÖSTERİLMEZ; bunun yerine dürüst bir
  * bilgilendirme yazılır.
  */
-export function DashboardView({ stats, publishingStats, onboarding, brands, accounts, recentFailures, user, demoMode, assistant }: Props) {
+export function DashboardView({ stats, publishingStats, onboarding, brands, accounts, recentFailures, user, assistant }: Props) {
   const hour = new Date().getHours();
   const greeting = hour < 6 ? 'İyi geceler' : hour < 12 ? 'Günaydın' : hour < 18 ? 'İyi günler' : 'İyi akşamlar';
   const maxDist = Math.max(1, ...stats.platformDistribution.map((p) => p.count));
@@ -137,12 +136,6 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
             <strong>Yayın modülü bu kurulumda kapalı.</strong> Şu anda içeriklerinizi hazırlayabilir,
             platforma özel metin ve görsellerini üretebilir, taslak olarak saklayabilirsiniz.
           </span>
-        </div>
-      )}
-      {demoMode && stats.publishingEnabled && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
-          <Icon name="alert-triangle" size={16} className="text-warning" />
-          <span><strong>Demo Modu —</strong> gerçek sosyal medya paylaşımı yapılmaz; yayınlar simülasyon olarak işaretlenir.</span>
         </div>
       )}
 

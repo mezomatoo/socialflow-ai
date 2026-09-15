@@ -260,7 +260,7 @@ export abstract class BaseSocialProvider implements SocialProvider {
       externalPostId,
       permalink: permalink ?? null,
       friendlyMessage: payload.demoMode
-        ? `Demo Modu — ${this.label} için gerçek sosyal medya paylaşımı yapılmadı.`
+        ? `Simülasyon — ${this.label} için gerçek sosyal medya paylaşımı yapılmadı.`
         : `${this.label} içeriği yayınlandı.`
     };
   }

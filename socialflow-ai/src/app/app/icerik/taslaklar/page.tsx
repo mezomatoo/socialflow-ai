@@ -25,7 +25,6 @@ export default async function DraftsPage() {
       emptyTitle="Taslak içerik yok"
       emptyDescription="Yeni bir içerik oluşturduğunuzda taslak olarak burada görünür."
       timezone={session.user.timezone}
-      demoMode={session.user.demoMode}
       dateMode="updated"
     />
   );

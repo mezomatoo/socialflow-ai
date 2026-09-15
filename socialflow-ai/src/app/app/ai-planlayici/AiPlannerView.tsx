@@ -44,11 +44,9 @@ const PLATFORM_OPTIONS = ['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X', 'TIKTOK', 'Y
 export function AiPlannerView({
   brands,
   campaigns,
-  demoMode
 }: {
   brands: { id: string; name: string }[];
   campaigns: { id: string; name: string }[];
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
@@ -112,7 +110,6 @@ export function AiPlannerView({
           “Takvime Ekle” ile taslak içerik açabilirsiniz — hiçbir şey otomatik yayınlanmaz.
         </p>
         <div className="mt-2 flex gap-2">
-          {demoMode ? <Badge tone="warning">Demo Modu</Badge> : null}
           {plan ? <Badge tone={plan.engine === 'ai' ? 'brand' : 'neutral'}>{plan.engineLabel}</Badge> : null}
         </div>
       </div>

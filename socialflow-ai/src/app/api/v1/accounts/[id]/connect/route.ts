@@ -28,7 +28,7 @@ export const POST = apiRoute(
       return ok({
         demo: true,
         authorizeUrl: null,
-        message: `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`,
+        message: `Simülasyon — ${account.displayName} hesabı gerçek bağlantı olmadan bağlandı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`,
         credentialsSet: Boolean(env.providers[platform]?.id && env.providers[platform]?.secret)
       });
     }

@@ -31,7 +31,6 @@ export default async function PublishedPage() {
       emptyTitle="Yayınlanmış içerik yok"
       emptyDescription="Planladığınız içerikler yayınlandıkça burada listelenir."
       timezone={session.user.timezone}
-      demoMode={session.user.demoMode}
       dateMode="published"
     />
   );

@@ -75,7 +75,7 @@ export function AccountsView({
         `/api/accounts/${a.id}/connect`
       );
       if (res.demo) {
-        toast.info('Demo Modu bağlantısı', res.message ?? 'Hesap simülasyon olarak bağlı.');
+        toast.info('Simülasyon bağlantısı', res.message ?? 'Hesap simülasyon olarak bağlı; gerçek paylaşım yapılmaz.');
       } else if (res.authorizeUrl) {
         toast.success('Yetkilendirme başlatılıyor', 'Resmî OAuth sayfasına yönlendiriliyorsunuz.');
         window.location.href = res.authorizeUrl;
@@ -134,17 +134,6 @@ export function AccountsView({
 
       {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
 
-      {demoMode && (
-        <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
-          <span className="mt-0.5 text-warning">
-            <Icon name="alert-triangle" size={16} />
-          </span>
-          <p>
-            <strong>Demo Modu etkin.</strong> Aşağıdaki hesaplar simülasyondur; gerçek sosyal medya paylaşımı yapılmaz.
-            Gerçek bağlantı için Ayarlar → Entegrasyonlar bölümünden resmî API kimlik bilgilerinizi tanımlayın.
-          </p>
-        </div>
-      )}
 
       {grouped.length === 0 ? (
         <div className="card p-6">
@@ -193,7 +182,7 @@ export function AccountsView({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-[14px] font-bold text-ink">{a.displayName}</p>
-                            {a.demoAccount && <Badge tone="warning">Demo</Badge>}
+                            {a.demoAccount && <Badge tone="warning">Simülasyon</Badge>}
                           </div>
                           <p className="truncate text-[12.5px] text-ink-muted">
                             @{a.handle} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
@@ -316,7 +305,7 @@ function AddAccountModal({
         externalId: null,
         tokenExpiresAt: null
       });
-      toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
+      toast.success('Hesap eklendi', res.demoAccount ? 'Simülasyon hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
     } catch (e) {
       toast.error('Eklenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
@@ -341,11 +330,6 @@ function AddAccountModal({
       }
     >
       <div className="space-y-4">
-        {demoMode && (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink">
-            Demo modunda hesaplar simülasyon olarak eklenir. Gerçek yayınlarda resmî OAuth akışı kullanılır.
-          </p>
-        )}
         <div>
           <label className="label">Platform</label>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">

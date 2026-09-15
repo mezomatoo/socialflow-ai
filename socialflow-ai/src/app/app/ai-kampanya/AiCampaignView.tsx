@@ -30,10 +30,8 @@ const PLATFORM_OPTIONS = ['INSTAGRAM', 'FACEBOOK', 'X', 'LINKEDIN', 'TIKTOK', 'Y
 
 export function AiCampaignView({
   brands,
-  demoMode
 }: {
   brands: { id: string; name: string }[];
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
@@ -108,7 +106,6 @@ export function AiCampaignView({
           kampanya koşulu gibi bilgileri AI UYDURMAZ — yalnızca sizin girdiğiniz gerçek bilgiler önerilere taşınır.
         </p>
         <div className="mt-2 flex gap-2">
-          {demoMode ? <Badge tone="warning">Demo Modu</Badge> : null}
           {concept ? <Badge tone={concept.engine === 'ai' ? 'brand' : 'neutral'}>{concept.engine === 'ai' ? 'AI ile üretildi' : 'Yerel motorla üretildi'}</Badge> : null}
         </div>
       </div>

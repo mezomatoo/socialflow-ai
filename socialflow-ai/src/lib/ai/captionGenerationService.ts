@@ -9,7 +9,7 @@ import type { ContentStyle } from '../platforms/platforms';
  * CaptionGenerationService — "AI İçerik Asistanı"
  * ---------------------------------------------------------------------------
  * Tüm üretken metin özellikleri burada toplanır. LLM erişimi varsa LLM,
- * yoksa doğal Türkçe üreten yerel şablon motoru kullanılır (Demo Modu).
+ * yoksa doğal Türkçe üreten yerel şablon motoru kullanılır (simülasyon modu).
  * Yerel motor hiçbir zaman fiyat/tarih/URL UYDURMAZ; eksik bilgiyi
  * "[BİLGİ EKSİK: ...]" olarak işaretler.
  */

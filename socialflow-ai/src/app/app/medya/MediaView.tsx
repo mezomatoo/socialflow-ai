@@ -39,18 +39,15 @@ const KIND_LABELS: Record<string, string> = {
 export function MediaView({
   items: initial,
   brands,
-  demoMode
 }: {
   items: MediaItem[];
   brands: { id: string; name: string }[];
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
   const [kind, setKind] = useState('all');
   const [brandId, setBrandId] = useState('all');
   const [q, setQ] = useState('');
-  const [semanticMode, setSemanticMode] = useState(false);
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -202,36 +199,7 @@ export function MediaView({
           <input className="input pl-9" placeholder="Dosya adı veya etiket ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <span className="hint ml-auto whitespace-nowrap">{filtered.length} dosya</span>
-        <label className="ml-2 flex items-center gap-1.5 text-[12px] font-semibold text-ink-muted whitespace-nowrap">
-          <input type="checkbox" checked={semanticMode} onChange={(e) => setSemanticMode(e.target.checked)} className="rounded" /> Semantik arama
-        </label>
       </div>
-      {semanticMode && (
-        <div className="card card-pad mb-4 border-brand-200 bg-brand-50">
-          <div className="flex items-center gap-2 text-[12.5px] font-bold text-brand-700"><Icon name="sparkles" size={14} /> Semantik arama aktif</div>
-          <p className="mt-1 text-[12px] leading-relaxed text-brand-700/80">Anlama dayalı arama — örnek: “kadın elinde serum”, “kurye” veya “premium siyah arka plan” yazın. Sonuçlar yalnızca bu çalışma alanının verisinden gelir (embedding izole). {q ? `Sorgu: “${q}”` : 'Arama kutusuna bir anlam yazın.'}</p>
-          {q.trim() && (() => {
-            const needle = q.trim().toLowerCase();
-            const demoHits = [
-              { id: 'media-1', title: 'Kadın elinde serum tutuyor', snippet: 'Premium siyah arka plan, stüdyo ışığı', score: 0.92 },
-              { id: 'media-2', title: 'Motor kurye fotoğrafı', snippet: 'Hızlı teslimat, şehir arka plan', score: 0.85 },
-              { id: 'content-1', title: 'Etiyopya lansman metni', snippet: 'Yeni sezon, %15 indirim', score: 0.88 },
-            ].filter(r => r.title.toLowerCase().includes(needle) || r.snippet.toLowerCase().includes(needle)).slice(0,3);
-            if (demoHits.length === 0) return <p className="mt-2 text-[12px] text-ink-muted">Anlamsal eşleşme bulunamadı — daha genel bir ifade deneyin.</p>;
-            return (
-              <ul className="mt-2 space-y-1">
-                {demoHits.map(h => (
-                  <li key={h.id} className="flex items-center justify-between rounded-lg border border-brand-200 bg-white px-3 py-2 text-[12.5px]">
-                    <div><span className="font-semibold text-ink">{h.title}</span><span className="ml-2 text-ink-muted">— {h.snippet}</span></div>
-                    <Badge tone="success">%{Math.round(h.score*100)}</Badge>
-                  </li>
-                ))}
-              </ul>
-            );
-          })()}
-        </div>
-      )}
-
       {/* Sürükle-bırak alanı / ızgara */}
       <div
         onDragOver={(e) => {
@@ -306,12 +274,6 @@ export function MediaView({
           </ul>
         )}
       </div>
-
-      {demoMode && (
-        <p className="hint mt-5 flex items-center justify-center gap-1.5 text-center">
-          <Icon name="info" size={13} /> Demo Modu — örnek medya dosyaları kullanılıyor.
-        </p>
-      )}
 
       {/* Detay / odak noktası modalı */}
       {selected && (

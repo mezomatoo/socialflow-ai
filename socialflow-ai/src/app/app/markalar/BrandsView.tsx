@@ -45,7 +45,7 @@ interface BrandItem {
 const FORMALITY: Record<string, string> = { FORMAL: 'Resmî', NEUTRAL: 'Nötr', CASUAL: 'Samimi' };
 const EMOJI: Record<string, string> = { NONE: 'Yok', LOW: 'Az', MEDIUM: 'Orta', HIGH: 'Çok' };
 
-export function BrandsView({ items: initial, demoMode }: { items: BrandItem[]; demoMode: boolean }) {
+export function BrandsView({ items: initial }: { items: BrandItem[] }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<BrandItem | 'new' | null>(null);
@@ -179,11 +179,6 @@ export function BrandsView({ items: initial, demoMode }: { items: BrandItem[]; d
         </ul>
       )}
 
-      {demoMode && (
-        <p className="hint mt-5 flex items-center justify-center gap-1.5 text-center">
-          <Icon name="info" size={13} /> Demo Modu — örnek marka profilleri yüklü.
-        </p>
-      )}
 
       {editing && (
         <BrandEditor
@@ -306,7 +301,7 @@ function BrandEditor({ brand, onClose, onSaved }: { brand: BrandItem | null; onC
             </div>
             <div>
               <label className="label">Logo URL</label>
-              <input className="input" value={form.logoUrl ?? ''} onChange={(e) => set('logoUrl', e.target.value || null)} placeholder="/demo/logo.svg" />
+              <input className="input" value={form.logoUrl ?? ''} onChange={(e) => set('logoUrl', e.target.value || null)} placeholder="https://ornek.com/logo.svg" />
             </div>
             <div>
               <label className="label">Ana renk</label>

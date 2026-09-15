@@ -58,7 +58,7 @@ export function SettingsView({
   integrations
 }: {
   role: string;
-  workspace: { name: string; slug: string; plan: string; demoMode: boolean; timezone: string; locale: string };
+  workspace: { name: string; slug: string; plan: string; timezone: string; locale: string };
   branding: Record<string, any>;
   settings: Record<string, any> | null;
   rules: RuleView[];
@@ -90,7 +90,7 @@ export function SettingsView({
       <div className="mt-5">
         {tab === 'genel' && <BrandingTab settings={settings} branding={branding} canEdit={canEdit} />}
         {tab === 'ai' && <AiTab settings={settings} canEdit={canEdit} />}
-        {tab === 'entegrasyonlar' && <IntegrationsTab integrations={integrations} demoMode={workspace.demoMode} />}
+        {tab === 'entegrasyonlar' && <IntegrationsTab integrations={integrations} />}
         {tab === 'kurallar' && <RulesTab rules={rules} canEdit={canEdit} />}
         {tab === 'calisma-alani' && <WorkspaceTab workspace={workspace} role={role} />}
       </div>
@@ -110,8 +110,6 @@ function BrandingTab({ settings, branding, canEdit }: { settings: any; branding:
     accentColor: settings?.accentColor ?? '#F59E0B',
     radius: settings?.radius ?? '14px',
     fontFamily: settings?.fontFamily ?? 'Inter',
-    demoBanner: settings?.demoBanner ?? true,
-    demoMode: branding?.demoMode ?? false
   });
   const [saving, setSaving] = useState(false);
 
@@ -146,7 +144,7 @@ function BrandingTab({ settings, branding, canEdit }: { settings: any; branding:
           <input className="input" disabled={!canEdit} maxLength={3} value={form.logoMark} onChange={(e) => set('logoMark', e.target.value)} />
         </Field>
         <Field label="Logo URL" className="sm:col-span-2">
-          <input className="input" disabled={!canEdit} value={form.logoUrl} onChange={(e) => set('logoUrl', e.target.value)} placeholder="/demo/logo.svg" />
+          <input className="input" disabled={!canEdit} value={form.logoUrl} onChange={(e) => set('logoUrl', e.target.value)} placeholder="https://ornek.com/logo.svg" />
         </Field>
         <ColorField label="Ana renk" value={form.primaryColor} disabled={!canEdit} onChange={(v) => set('primaryColor', v)} />
         <ColorField label="İkincil renk" value={form.secondaryColor} disabled={!canEdit} onChange={(v) => set('secondaryColor', v)} />
@@ -157,10 +155,6 @@ function BrandingTab({ settings, branding, canEdit }: { settings: any; branding:
         <Field label="Yazı tipi" className="sm:col-span-2">
           <input className="input" disabled={!canEdit} value={form.fontFamily} onChange={(e) => set('fontFamily', e.target.value)} />
         </Field>
-        <div className="sm:col-span-2 space-y-3 border-t border-line pt-4">
-          <Switch checked={form.demoBanner} disabled={!canEdit} onChange={(v) => set('demoBanner', v)} label="Demo modu uyarı şeridini göster" />
-          <Switch checked={form.demoMode} disabled={!canEdit} onChange={(v) => set('demoMode', v)} label="Demo Modu (gerçek sosyal medya paylaşımı yapılmasın)" />
-        </div>
       </div>
       {canEdit && (
         <footer className="flex justify-end border-t border-line px-5 py-3">
@@ -245,7 +239,7 @@ function AiTab({ settings, canEdit }: { settings: any; canEdit: boolean }) {
 }
 
 /* ------------------------------------------------------- Entegrasyonlar */
-function IntegrationsTab({ integrations, demoMode }: { integrations: IntegrationRow[]; demoMode: boolean }) {
+function IntegrationsTab({ integrations }: { integrations: IntegrationRow[] }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -277,15 +271,6 @@ function IntegrationsTab({ integrations, demoMode }: { integrations: Integration
 
   return (
     <div className="space-y-3">
-      {demoMode && (
-        <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
-          <Icon name="alert-triangle" size={16} className="mt-0.5 text-warning" />
-          <p>
-            <strong>Demo Modu etkin.</strong> Kimlik bilgisi tanımlı olmayan platformlar simülasyon olarak çalışır; gerçek
-            paylaşım yapılmaz.
-          </p>
-        </div>
-      )}
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {items.map((it) => (
           <li key={it.platform} className="card card-pad">
@@ -453,7 +438,6 @@ function WorkspaceTab({ workspace, role }: { workspace: any; role: string }) {
         <InfoRow label="Rolünüz" value={ROLE_LABELS[role] ?? role} />
         <InfoRow label="Zaman dilimi" value={workspace.timezone} />
         <InfoRow label="Dil" value={workspace.locale === 'tr' ? 'Türkçe' : workspace.locale} />
-        <InfoRow label="Demo Modu" value={workspace.demoMode ? 'Etkin' : 'Kapalı'} />
       </dl>
       <div className="border-t border-line px-5 py-3">
         <p className="hint">

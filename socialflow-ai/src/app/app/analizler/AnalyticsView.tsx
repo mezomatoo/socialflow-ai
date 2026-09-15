@@ -29,7 +29,6 @@ interface Summary {
   series: { date: string; impressions: number; engagement: number }[];
   bestContent: { id: string; caption: string; platform: string; impressions: number; engagementRate: number }[];
   insights: string[];
-  demoMode: boolean;
 }
 
 interface Daily {
@@ -41,11 +40,9 @@ interface Daily {
 export function AnalyticsView({
   brands,
   timezone,
-  demoMode
 }: {
   brands: { id: string; name: string }[];
   timezone: string;
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [days, setDays] = useState(30);
@@ -277,11 +274,6 @@ export function AnalyticsView({
             </ul>
           </section>
 
-          {demoMode && (
-            <p className="hint mt-5 flex items-center justify-center gap-1.5 text-center">
-              <Icon name="info" size={13} /> Demo Modu — sahte analitik üretilmez; yalnızca gerçek API verisi gösterilir.
-            </p>
-          )}
         </>
       )}
     </div>

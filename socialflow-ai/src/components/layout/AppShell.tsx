@@ -22,8 +22,6 @@ export interface ShellBranding {
   logoMark: string;
   logoUrl: string | null;
   primaryColor: string;
-  demoMode: boolean;
-  demoBanner: boolean;
   aiProvider: string;
 }
 
@@ -216,15 +214,6 @@ export function AppShell({
             <Icon name="sparkles" size={16} strokeWidth={2} />
             Yeni İçerik Oluştur
           </Link>
-          {branding.demoMode && branding.demoBanner ? (
-            <div className="mt-3 rounded-lg border border-warning/30 bg-warning/8 px-2.5 py-2">
-              <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#92400e]">
-                <Icon name="alert-triangle" size={12} strokeWidth={2.2} />
-                Demo Modu aktif
-              </p>
-              <p className="mt-0.5 text-[10.5px] leading-relaxed text-[#a16207]">Gerçek sosyal medya paylaşımı yapılmaz.</p>
-            </div>
-          ) : null}
         </div>
       </aside>
 
@@ -249,13 +238,6 @@ export function AppShell({
           </button>
 
           <div className="ml-auto flex items-center gap-1.5">
-            {branding.demoMode ? (
-              <Badge tone="warning" className="hidden sm:inline-flex">
-                <Icon name="alert-triangle" size={11} strokeWidth={2.4} />
-                Demo Modu
-              </Badge>
-            ) : null}
-
             {notificationsEnabled && (
             <div className="relative">
               <button type="button" className="btn-icon relative h-9 w-9" onClick={openNotifications} aria-label="Bildirimler">
@@ -376,14 +358,6 @@ export function AppShell({
             </div>
           </div>
         </header>
-
-        {branding.demoMode && branding.demoBanner ? (
-          <div className="border-b border-warning/25 bg-warning/8 px-4 py-2 text-center">
-            <p className="text-[11.5px] font-semibold text-[#92400e]">
-              <strong>Demo Modu</strong> — gerçek sosyal medya paylaşımı yapılmaz. Yayın simülasyonu, doğrulama ve planlama akışları tam çalışır durumdadır.
-            </p>
-          </div>
-        ) : null}
 
         <main className="min-w-0 flex-1">{children}</main>
       </div>

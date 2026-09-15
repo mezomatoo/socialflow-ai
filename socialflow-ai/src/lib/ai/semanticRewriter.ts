@@ -11,7 +11,7 @@ import {
 /**
  * Anlamsal (semantic) Türkçe metin yeniden yazıcı — yerel motor.
  * ---------------------------------------------------------------------------
- * LLM erişimi olmadığında (Demo Modu) devreye girer. Temel ilke:
+ * LLM erişimi olmadığında (simülasyon modu) devreye girer. Temel ilke:
  * metni karakter sınırından KESMEZ; anlamı koruyarak kademeli biçimde
  * yeniden yazar. Kesme işlemi yalnızca son çaredir ve uyarı olarak işaretlenir.
  *

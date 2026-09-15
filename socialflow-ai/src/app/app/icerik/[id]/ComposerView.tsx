@@ -459,7 +459,7 @@ export function ComposerView({
       const res = await api.post<{ ready: number; total: number; results: any[] }>(`/api/contents/${content.id}/publish`, { targetIds });
       await reload();
       if (res.ready === res.total && res.total > 0) {
-        toast.success(demoMode ? 'Demo yayını tamamlandı' : 'Yayınlandı', `${res.ready}/${res.total} hedef başarılı.`);
+        toast.success(demoMode ? 'Yayın simülasyonu tamamlandı (gerçek paylaşım yapılmadı)' : 'Yayınlandı', `${res.ready}/${res.total} hedef başarılı.`);
       } else {
         toast.warning('Kısmen yayınlandı', `${res.ready}/${res.total} hedef başarılı. Başarısız olanlar yeniden denenebilir.`);
       }
@@ -547,12 +547,6 @@ export function ComposerView({
             {modules?.socialPublishing?.notice ??
               'Yayın modülü bu kurulumda kapalı. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
           </span>
-        </div>
-      )}
-      {publishingEnabled && demoMode && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5 text-[12.5px] text-ink">
-          <Icon name="alert-triangle" size={15} className="text-warning" />
-          <span><strong>Demo Modu —</strong> gerçek sosyal medya paylaşımı yapılmadı. Yayınlar simülasyon olarak işaretlenir.</span>
         </div>
       )}
 
@@ -872,7 +866,7 @@ function TargetCard({
         </div>
         <div className="ml-auto flex items-center gap-2">
           <StatusPill status={t.status} />
-          {t.socialAccount?.demoAccount && <Badge tone="warning">Demo</Badge>}
+          {t.socialAccount?.demoAccount && <Badge tone="warning">Simülasyon</Badge>}
         </div>
       </header>
 

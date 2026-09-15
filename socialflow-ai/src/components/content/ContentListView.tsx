@@ -44,7 +44,6 @@ interface Props {
   emptyTitle: string;
   emptyDescription: string;
   timezone: string;
-  demoMode: boolean;
   /** Hangi tarih alanı öne çıkarılsın (planlananlar/yayınlananlar için). */
   dateMode?: 'scheduled' | 'published' | 'updated';
 }
@@ -59,7 +58,6 @@ export function ContentListView({
   emptyTitle,
   emptyDescription,
   timezone,
-  demoMode,
   dateMode = 'updated'
 }: Props) {
   const toast = useToast();
@@ -301,11 +299,6 @@ export function ContentListView({
         </ul>
       )}
 
-      {demoMode && (
-        <p className="hint mt-5 flex items-center justify-center gap-1.5 text-center">
-          <Icon name="info" size={13} /> Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.
-        </p>
-      )}
     </div>
   );
 }

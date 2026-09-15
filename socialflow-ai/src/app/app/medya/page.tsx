@@ -22,7 +22,6 @@ export default async function MediaPage() {
     <MediaView
       items={JSON.parse(JSON.stringify(media.map(serializeMedia)))}
       brands={JSON.parse(JSON.stringify(brands))}
-      demoMode={session.user.demoMode}
     />
   );
 }

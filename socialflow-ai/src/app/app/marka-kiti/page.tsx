@@ -17,5 +17,5 @@ export default async function BrandKitHubPage() {
   }
 
   const brands = await listBrandKitsForWorkspace(session.user.workspaceId);
-  return <BrandKitHub items={JSON.parse(JSON.stringify(brands))} demoMode={session.user.demoMode} />;
+  return <BrandKitHub items={JSON.parse(JSON.stringify(brands))} />;
 }

@@ -64,7 +64,7 @@ function formatTime(iso: string): string {
   }
 }
 
-export function AutomationsView({ demoMode }: { demoMode: boolean }) {
+export function AutomationsView() {
   const toast = useToast();
   const [rules, setRules] = useState<AutomationRuleDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,7 +210,6 @@ export function AutomationsView({ demoMode }: { demoMode: boolean }) {
           AI asla sessizce yayınlamaz, onaylamaz veya silmez.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {demoMode ? <Badge tone="warning">Demo Modu</Badge> : null}
           <Badge tone="brand">Döngü koruması aktif</Badge>
         </div>
         <div className="mt-3 rounded-xl border border-warning/30 bg-warning/5 p-3 text-[12.5px] leading-relaxed text-ink">

@@ -28,7 +28,7 @@ function scoreTone(score: number): 'danger' | 'warning' | 'success' {
   return 'danger';
 }
 
-export function BrandKitHub({ items, demoMode }: { items: HubItem[]; demoMode: boolean }) {
+export function BrandKitHub({ items }: { items: HubItem[] }) {
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:py-8">
       <div className="mb-5">
@@ -39,12 +39,6 @@ export function BrandKitHub({ items, demoMode }: { items: HubItem[]; demoMode: b
         </p>
       </div>
 
-      {demoMode ? (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-line bg-surface-subtle px-3.5 py-2.5 text-[12.5px] text-ink-muted">
-          <Icon name="info" size={15} />
-          Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.
-        </div>
-      ) : null}
 
       {items.length === 0 ? (
         <div className="card p-6">

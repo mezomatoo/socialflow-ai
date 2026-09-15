@@ -58,12 +58,10 @@ interface SpellResult {
 export function AssistantView({
   brands,
   aiProvider,
-  demoMode,
   timezone
 }: {
   brands: { id: string; name: string; defaultStyle: string }[];
   aiProvider: string;
-  demoMode: boolean;
   timezone: string;
 }) {
   const toast = useToast();
@@ -150,11 +148,6 @@ export function AssistantView({
             <Icon name="sparkles" size={11} />
             {aiProvider === 'deterministic' ? 'Yerel motor (LLM anahtarı tanımlı değil)' : `Sağlayıcı: ${aiProvider}`}
           </Badge>
-          {demoMode && (
-            <Badge tone="neutral">
-              <Icon name="info" size={11} /> Demo Modu
-            </Badge>
-          )}
         </div>
       </div>
 

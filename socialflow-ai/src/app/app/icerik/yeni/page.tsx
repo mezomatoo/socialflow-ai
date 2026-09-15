@@ -46,7 +46,6 @@ export default async function NewContentPage() {
       media={JSON.parse(JSON.stringify(media.map(serializeMedia)))}
       platforms={JSON.parse(JSON.stringify(platforms))}
       timezone={session.user.timezone}
-      demoMode={session.user.demoMode}
     />
   );
 }

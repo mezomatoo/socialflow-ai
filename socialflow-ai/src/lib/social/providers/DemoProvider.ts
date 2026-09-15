@@ -22,7 +22,7 @@ import { charLength } from '../../text';
  * Yayınlama hattının (kuyruk → doğrulama → deneme → durum → bildirim →
  * tekrar dene) uçtan uca test edilebilmesi için gerçekçi bir simülasyon
  * üretir. Sonuçlar her zaman `demoMode: true` ile işaretlenir ve arayüzde
- * "Demo Modu — gerçek sosyal medya paylaşımı yapılmadı." uyarısı gösterilir.
+ * "Simülasyon — gerçek sosyal medya paylaşımı yapılmadı." uyarısı gösterilir.
  */
 
 export interface DemoOptions {
@@ -110,7 +110,7 @@ export class DemoProvider implements SocialProvider {
       demoMode: true,
       externalPostId: id,
       permalink: null,
-      friendlyMessage: `Demo Modu — ${this.label} (${kind}) için gerçek sosyal medya paylaşımı yapılmadı.`
+      friendlyMessage: `Simülasyon — ${this.label} (${kind}) için gerçek sosyal medya paylaşımı yapılmadı.`
     };
   }
 

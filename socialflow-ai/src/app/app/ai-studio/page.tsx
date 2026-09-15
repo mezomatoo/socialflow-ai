@@ -22,5 +22,5 @@ export default async function Page() {
     select: { id: true, name: true, description: true }
   });
 
-  return <AiStudioView brands={brands} aiMode={aiModeLabel()} demoMode={session.user.demoMode} />;
+  return <AiStudioView brands={brands} aiMode={aiModeLabel()} />;
 }

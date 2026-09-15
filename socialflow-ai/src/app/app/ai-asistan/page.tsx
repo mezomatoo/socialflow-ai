@@ -27,7 +27,6 @@ export default async function AssistantPage() {
     <AssistantView
       brands={JSON.parse(JSON.stringify(brands))}
       aiProvider={branding.aiProvider}
-      demoMode={session.user.demoMode}
       timezone={session.user.timezone}
     />
   );

@@ -24,7 +24,6 @@ export default async function AnalyticsPage() {
     <AnalyticsView
       brands={JSON.parse(JSON.stringify(brands))}
       timezone={session.user.timezone}
-      demoMode={session.user.demoMode}
     />
   );
 }

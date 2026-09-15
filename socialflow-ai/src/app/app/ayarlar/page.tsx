@@ -18,7 +18,7 @@ export default async function SettingsPage() {
     prisma.appSettings.findUnique({ where: { workspaceId: ws } }),
     getAllRules(ws),
     prisma.providerIntegration.findMany({ where: { workspaceId: ws } }),
-    prisma.workspace.findUnique({ where: { id: ws }, select: { name: true, slug: true, plan: true, demoMode: true, timezone: true, locale: true } })
+    prisma.workspace.findUnique({ where: { id: ws }, select: { name: true, slug: true, plan: true, timezone: true, locale: true } })
   ]);
 
   return (

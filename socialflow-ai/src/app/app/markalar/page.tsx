@@ -54,5 +54,5 @@ export default async function BrandsPage() {
       : null
   }));
 
-  return <BrandsView items={JSON.parse(JSON.stringify(items))} demoMode={session.user.demoMode} />;
+  return <BrandsView items={JSON.parse(JSON.stringify(items))} />;
 }

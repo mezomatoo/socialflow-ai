@@ -150,7 +150,7 @@ describe('Kritik yol: 1 master içerik → 6 platform çocuğu → yayın', () =
 
     // Demo dürüstlüğü: gerçek paylaşım yapılmadı bildirimi.
     const notes = await prisma.notification.findMany({ where: { contentId, type: 'PUBLISHED' } });
-    assert.ok(notes.some((n) => n.message.includes('Demo Modu')), 'demo modu bildirimi olmalı');
+    assert.ok(notes.some((n) => n.message.includes('Simülasyon')), 'simülasyon bildirimi olmalı');
   });
 
   it('yeniden yayınlama idempotenttir — çift gönderim yok', async () => {

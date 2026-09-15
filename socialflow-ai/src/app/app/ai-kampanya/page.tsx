@@ -14,5 +14,5 @@ export default async function Page() {
     orderBy: { name: 'asc' },
     select: { id: true, name: true }
   });
-  return <AiCampaignView brands={brands} demoMode={session.user.demoMode} />;
+  return <AiCampaignView brands={brands} />;
 }

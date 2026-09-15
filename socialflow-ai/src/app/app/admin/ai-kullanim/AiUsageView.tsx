@@ -37,7 +37,7 @@ const SERVICE_LABELS: Record<string, string> = {
   embeddings: 'Gömme (embedding)'
 };
 
-export function AiUsageView({ demoMode }: { demoMode: boolean }) {
+export function AiUsageView() {
   const [period, setPeriod] = useState<'today' | 'month'>('month');
   const [data, setData] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +78,6 @@ export function AiUsageView({ demoMode }: { demoMode: boolean }) {
       <div className="mb-4 flex items-center gap-2">
         <button onClick={() => setPeriod('today')} className={`chip ${period === 'today' ? 'chip-active' : ''}`}>Bugün</button>
         <button onClick={() => setPeriod('month')} className={`chip ${period === 'month' ? 'chip-active' : ''}`}>Bu Ay</button>
-        {demoMode && <Badge tone="info" className="ml-2">Demo Modu</Badge>}
         {data && <Badge tone="neutral" className="ml-1">Sağlayıcı: {data.aiMode || data.provider}</Badge>}
       </div>
 

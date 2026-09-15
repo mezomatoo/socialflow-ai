@@ -38,7 +38,7 @@ export function ForgotPasswordForm() {
 
       {devLink ? (
         <p className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-[11.5px] leading-relaxed text-ink-muted">
-          Geliştirme/demo modu: e-posta gönderimi yapılandırılmadığı için bağlantı burada gösteriliyor —{' '}
+          E-posta gönderimi bu kurulumda yapılandırılmadığı için sıfırlama bağlantısı burada gösteriliyor —{' '}
           <a href={devLink} className="font-semibold text-brand hover:underline">
             şifremi sıfırla
           </a>

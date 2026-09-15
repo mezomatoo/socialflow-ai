@@ -32,7 +32,6 @@ export default async function BrandKitEditorPage({ params }: { params: { brandId
     <BrandKitView
       brandId={params.brandId}
       initialData={JSON.parse(JSON.stringify(data))}
-      demoMode={session.user.demoMode}
     />
   );
 }

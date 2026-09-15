@@ -56,14 +56,12 @@ export function NewContentView({
   media,
   platforms,
   timezone,
-  demoMode
 }: {
   brands: Brand[];
   accounts: Account[];
   media: Media[];
   platforms: Platform[];
   timezone: string;
-  demoMode: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -418,7 +416,6 @@ export function NewContentView({
               {creating ? <Spinner size={16} /> : <Icon name="sparkles" size={16} />}
               {creating ? 'Oluşturuluyor…' : 'İçeriği Oluştur ve Uyarla'}
             </button>
-            {demoMode && <p className="hint mt-2 text-center">Demo Modu — gerçek paylaşım yapılmaz.</p>}
           </div>
         </aside>
       </div>

@@ -48,11 +48,9 @@ function isoDay(d: Date): string {
 export function CalendarView({
   brands,
   timezone,
-  demoMode
 }: {
   brands: { id: string; name: string; primaryColor: string }[];
   timezone: string;
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [cursor, setCursor] = useState(() => new Date());
@@ -249,11 +247,6 @@ export function CalendarView({
         </div>
       )}
 
-      {demoMode && (
-        <p className="hint mt-4 flex items-center justify-center gap-1.5 text-center">
-          <Icon name="info" size={13} /> Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.
-        </p>
-      )}
 
       {editing && (
         <RescheduleModal item={editing} timezone={timezone} onClose={() => setEditing(null)} onSave={reschedule} />

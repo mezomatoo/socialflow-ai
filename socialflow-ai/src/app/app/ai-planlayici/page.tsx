@@ -16,5 +16,5 @@ export default async function Page() {
     prisma.campaign.findMany({ where: { workspaceId: ws }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, name: true } })
   ]);
 
-  return <AiPlannerView brands={brands} campaigns={campaigns} demoMode={session.user.demoMode} />;
+  return <AiPlannerView brands={brands} campaigns={campaigns} />;
 }

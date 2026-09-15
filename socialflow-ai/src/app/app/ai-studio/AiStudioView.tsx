@@ -69,11 +69,9 @@ const TABS = [
 export function AiStudioView({
   brands,
   aiMode,
-  demoMode
 }: {
   brands: { id: string; name: string; description: string | null }[];
   aiMode: string;
-  demoMode: boolean;
 }) {
   const toast = useToast();
   const [tab, setTab] = useState('generate');
@@ -209,7 +207,6 @@ export function AiStudioView({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge tone="brand"><Icon name="sparkles" size={11} /> Marka kiti entegre</Badge>
           <Badge tone="neutral">Sağlayıcı: {aiMode || 'yerel motor'}</Badge>
-          {demoMode ? <Badge tone="warning">Demo Modu</Badge> : null}
         </div>
       </div>
 

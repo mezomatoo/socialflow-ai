@@ -101,7 +101,7 @@ export class TikTokProvider extends OAuth2Provider {
       permalink: null,
       providerScheduled: false,
       friendlyMessage: payload.demoMode
-        ? 'Demo Modu — TikTok için gerçek video yüklemesi yapılmadı.'
+        ? 'Simülasyon — TikTok için gerçek video yüklemesi yapılmadı.'
         : 'TikTok videosu işleniyor. Yükleme durumu birkaç dakika içinde güncellenir.'
     };
   }

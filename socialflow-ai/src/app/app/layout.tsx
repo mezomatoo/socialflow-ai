@@ -35,8 +35,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
             logoMark: branding.logoMark,
             logoUrl: branding.logoUrl,
             primaryColor: branding.primaryColor,
-            demoMode: branding.demoMode,
-            demoBanner: branding.demoBanner,
             aiProvider: branding.aiProvider
           }}
         >

@@ -31,7 +31,6 @@ export default async function ScheduledPage() {
       emptyTitle="Planlanmış içerik yok"
       emptyDescription="Bir içeriği açıp tarih ve saat vererek yayın kuyruğuna ekleyebilirsiniz."
       timezone={session.user.timezone}
-      demoMode={session.user.demoMode}
       dateMode="scheduled"
     />
   );

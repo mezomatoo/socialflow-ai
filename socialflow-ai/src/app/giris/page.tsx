@@ -27,7 +27,6 @@ const FEATURES = [
 export default async function LoginPage() {
   const workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } });
   const branding = await getAppBranding(workspace?.id ?? null);
-  const demoUser = await prisma.user.findFirst({ where: { workspaceId: workspace?.id ?? '' }, select: { email: true } });
 
   return (
     <div className="flex min-h-screen bg-white">
@@ -94,7 +93,7 @@ export default async function LoginPage() {
 
           <div className="mt-7">
             <Suspense fallback={<div className="skeleton h-64 w-full" />}>
-              <LoginForm demoUser={{ email: demoUser?.email ?? 'demo@socialflow.ai', password: '', appName: branding.appName }} />
+              <LoginForm appName={branding.appName} />
             </Suspense>
           </div>
         </div>

@@ -19,7 +19,7 @@ import { validateMediaForRule } from '../media/validate';
  *   retry'lar çift gönderim YARATMAZ.
  * - Hedef bazlı: Instagram başarılı, X başarısız ise kampanya tümden
  *   "başarısız" işaretlenmez; her hedefin kendi durumu güncellenir.
- * - Demo Modu: gerçek paylaşım yapılmaz, sonuç açıkça işaretlenir.
+ * - Simülasyon (demo mod): gerçek paylaşım yapılmaz, sonuç açıkça işaretlenir.
  * - Token'lar yalnızca burada, sunucu tarafında çözülür.
  */
 
@@ -97,7 +97,7 @@ export async function publishPlatformContent(
       ok: true,
       status: 'PUBLISHED',
       message: existing.demoMode
-        ? 'Demo Modu — bu içerik daha önce simüle edilmişti; gerçek paylaşım yapılmadı.'
+        ? 'Simülasyon — bu içerik daha önce simüle edilmişti; gerçek paylaşım yapılmadı.'
         : 'Bu içerik daha önce yayınlanmış. Çift gönderim engellendi.',
       retryable: false,
       demoMode: existing.demoMode,
@@ -239,7 +239,7 @@ export async function publishPlatformContent(
       title: `${PLATFORM_META[platform]?.name ?? platform} yayını başarılı`,
       message:
         result.demoMode || ctx.demoMode
-          ? `Demo Modu — ${rule.label} için gerçek sosyal medya paylaşımı yapılmadı.`
+          ? `Simülasyon — ${rule.label} için gerçek sosyal medya paylaşımı yapılmadı.`
           : `${rule.label} başarıyla yayınlandı.`,
       contentId: pc.contentId,
       actionLabel: result.permalink ? 'Gönderiyi Görüntüle' : 'İçeriği Aç',
@@ -266,7 +266,7 @@ export async function publishPlatformContent(
       status: 'PUBLISHED',
       message:
         result.demoMode || ctx.demoMode
-          ? 'Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.'
+          ? 'Simülasyon — gerçek sosyal medya paylaşımı yapılmadı.'
           : `${rule.label} yayınlandı.`,
       retryable: false,
       demoMode: Boolean(result.demoMode || ctx.demoMode),
