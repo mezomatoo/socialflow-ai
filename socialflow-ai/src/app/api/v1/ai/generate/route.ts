@@ -10,7 +10,11 @@ export const POST = apiRoute(
   assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const task = String(body.task ?? '') as AssistantTask;
-    if (!TASK_LABELS[task]) return badRequest('Geçersiz AI görevi.');
+    if (!TASK_LABELS[task]) {
+      return badRequest(
+        `Geçersiz AI görevi. Desteklenen görevler: ${Object.keys(TASK_LABELS).join(', ')}`
+      );
+    }
 
     const brand = body.brandId
       ? await prisma.brand.findFirst({
