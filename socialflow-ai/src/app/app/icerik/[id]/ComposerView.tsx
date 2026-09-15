@@ -425,7 +425,7 @@ export function ComposerView({
       {/* Üst çubuk */}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href="/taslaklar" className="mb-1 inline-flex items-center gap-1 text-[12px] font-semibold text-ink-faint hover:text-brand-600">
+          <Link href="/app/icerik/taslaklar" className="mb-1 inline-flex items-center gap-1 text-[12px] font-semibold text-ink-faint hover:text-brand-600">
             <Icon name="arrowLeft" size={13} /> İçeriklere dön
           </Link>
           <div className="flex flex-wrap items-center gap-2">

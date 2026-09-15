@@ -53,7 +53,7 @@ export function BrandKitHub({ items, demoMode }: { items: HubItem[]; demoMode: b
             title="Henüz marka yok"
             description="Marka kiti oluşturmak için önce bir marka profili ekleyin."
             action={
-              <Link href="/marka-profilleri" className="btn-primary btn-md inline-flex">
+              <Link href="/app/markalar" className="btn-primary btn-md inline-flex">
                 <Icon name="plus" size={15} /> Marka Profilleri
               </Link>
             }
@@ -66,7 +66,7 @@ export function BrandKitHub({ items, demoMode }: { items: HubItem[]; demoMode: b
             return (
               <li key={b.brandId}>
                 <Link
-                  href={`/marka-kiti/${b.brandId}`}
+                  href={`/app/marka-kiti/${b.brandId}`}
                   className="card card-hover flex h-full flex-col overflow-hidden no-underline"
                 >
                   <div className="h-1.5 w-full" style={{ background: b.primaryColor }} />

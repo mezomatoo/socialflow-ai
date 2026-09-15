@@ -139,7 +139,7 @@ export function ContentListView({
           <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">{title}</h1>
           <p className="mt-1 text-[13.5px] text-ink-muted">{subtitle}</p>
         </div>
-        <Link href="/yeni-icerik" className="btn-primary btn-md">
+        <Link href="/app/icerik/yeni" className="btn-primary btn-md">
           <Icon name="plus" size={16} /> Yeni İçerik
         </Link>
       </div>
@@ -182,7 +182,7 @@ export function ContentListView({
               description={items.length === 0 ? emptyDescription : 'Arama veya filtre ölçütlerini değiştirmeyi deneyin.'}
               action={
                 items.length === 0 ? (
-                  <Link href="/yeni-icerik" className="btn-primary btn-md">
+                  <Link href="/app/icerik/yeni" className="btn-primary btn-md">
                     <Icon name="plus" size={15} /> Yeni İçerik
                   </Link>
                 ) : (

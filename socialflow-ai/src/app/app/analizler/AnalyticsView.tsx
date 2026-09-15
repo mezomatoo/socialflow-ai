@@ -200,7 +200,7 @@ export function AnalyticsView({
                   <div>
                     <p className="text-[13px] font-bold text-ink">Gerçek etkileşim verisi yok</p>
                     <p className="mt-0.5 text-[12.5px] text-ink-muted">{summary?.note}</p>
-                    <Link href="/sosyal-hesaplar" className="btn-secondary btn-sm mt-3">
+                    <Link href="/app/hesaplar" className="btn-secondary btn-sm mt-3">
                       <Icon name="users" size={14} /> Hesapları Bağla
                     </Link>
                   </div>

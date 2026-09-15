@@ -133,7 +133,7 @@ export function BrandKitView({ brandId, initialData, demoMode }: { brandId: stri
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:py-8">
       {/* Başlık */}
       <div className="mb-5">
-        <Link href="/marka-kiti" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted hover:text-ink">
+        <Link href="/app/marka-kiti" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted hover:text-ink">
           <Icon name="collapse" size={14} /> Tüm Marka Kitleri
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">

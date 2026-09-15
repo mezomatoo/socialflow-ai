@@ -142,7 +142,7 @@ export function CalendarView({
             Planlanan tüm yayınlar. Bir kartı başka bir güne sürükleyerek yeniden planlayabilirsiniz.
           </p>
         </div>
-        <Link href="/yeni-icerik" className="btn-primary btn-md">
+        <Link href="/app/icerik/yeni" className="btn-primary btn-md">
           <Icon name="plus" size={16} /> Yeni İçerik
         </Link>
       </div>
@@ -241,7 +241,7 @@ export function CalendarView({
             title="Bu dönemde planlanmış içerik yok"
             description="Yeni bir içerik oluşturup takvimde bir güne planlayın."
             action={
-              <Link href="/yeni-icerik" className="btn-primary btn-md">
+              <Link href="/app/icerik/yeni" className="btn-primary btn-md">
                 <Icon name="plus" size={15} /> Yeni İçerik
               </Link>
             }
