@@ -219,7 +219,9 @@ describe('Faz 2 — kapsam kapıları (sahte çalışma yok)', () => {
     assert.equal(state.analytics.enabled, false);
     assert.equal(state.automation.enabled, false);
     assert.ok(moduleNotice('analytics').length > 10);
-    assert.ok(state.analytics.notice.includes('Faz 4'));
+    // Müşteri mesajı geliştirme fazı terimi İÇERMEZ (navigasyon temizliği §9).
+    assert.ok(!/Faz \d/.test(state.analytics.notice), 'kapalı modül mesajı faz terimi içermemeli');
+    assert.ok(state.analytics.notice.includes('henüz etkin değil'));
   });
 
   it('kapalı modül 501 (MODULE_NOT_ENABLED) hatası verir — sahte başarı yok', () => {

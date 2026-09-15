@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
+import { isModuleEnabled } from '@/lib/phase/phaseGates';
+import { PhaseGateNotice } from '@/components/ui/PhaseNotice';
 import { AiStudioView } from './AiStudioView';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +11,19 @@ export const metadata = { title: 'AI Kreatif Stüdyo' };
 export default async function Page() {
   const session = await getSession();
   if (!session) redirect('/giris');
+  // Kapı (§3): kreatif stüdyo üretim motoru gerçek sağlayıcıya bağlanmadan
+  // çalışıyormuş gibi gösterilmez; sahte görsel üretimi müşteriye sunulmaz.
+  if (!isModuleEnabled('creativeStudio')) {
+    return (
+      <PhaseGateNotice
+        module="creativeStudio"
+        phase1Alternatives={[
+          { href: '/app/medya', label: 'Medya Kütüphanesi' },
+          { href: '/app/ai-asistan', label: 'AI İçerik Asistanı' }
+        ]}
+      />
+    );
+  }
   const ws = session.user.workspaceId;
   const brands: any[] = await prisma.brand.findMany({ where: { workspaceId: ws }, orderBy: { name: 'asc' } }).catch(() => []);
   // prefetch kits for demo

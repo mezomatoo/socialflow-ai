@@ -72,7 +72,7 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     phase: 4,
     label: 'Analitik ve Raporlama',
     enabledInPhase1: false,
-    notice: 'Analitik Faz 4’te etkinleşecek; gerçek yayın verisi olmadan gösterilecek metrik yoktur.'
+    notice: 'Analitik ve raporlama bu kurulumda henüz etkin değil; gerçek yayın verisi olmadan gösterilecek metrik yoktur.'
   },
   notifications: {
     id: 'notifications',
@@ -87,63 +87,63 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     label: 'AI İçerik Asistanı',
     enabledInPhase1: false,
     notice:
-      'Serbest metin üreten AI asistanı Faz 2’de etkinleşecek. Faz 1’de AI, kompozisyondaki “Platformlara Uyarla” adımında metninizi platform kurallarına göre yeniden yazar.'
+      'Serbest metin üreten AI asistanı bu kurulumda henüz etkin değil. AI, kompozisyondaki “Platformlara Uyarla” adımında metninizi platform kurallarına göre yeniden yazar.'
   },
   creativeStudio: {
     id: 'creativeStudio',
     phase: 4,
     label: 'Kreatif Stüdyo',
     enabledInPhase1: false,
-    notice: 'Gelişmiş kreatif üretimi Faz 4’te etkinleşecek.'
+    notice: 'Gelişmiş kreatif üretimi bu kurulumda henüz etkin değil.'
   },
   automation: {
     id: 'automation',
     phase: 5,
     label: 'Otomasyon Motoru',
     enabledInPhase1: false,
-    notice: 'Otomasyon Faz 5’te etkinleşecek.'
+    notice: 'Otomasyon motoru bu kurulumda henüz etkin değil.'
   },
   inbox: {
     id: 'inbox',
     phase: 5,
     label: 'Gelen Kutusu',
     enabledInPhase1: false,
-    notice: 'Birleşik gelen kutusu Faz 5’te etkinleşecek.'
+    notice: 'Birleşik gelen kutusu bu kurulumda henüz etkin değil.'
   },
   listening: {
     id: 'listening',
     phase: 5,
     label: 'Sosyal Dinleme',
     enabledInPhase1: false,
-    notice: 'Sosyal dinleme Faz 5’te etkinleşecek.'
+    notice: 'Sosyal dinleme bu kurulumda henüz etkin değil.'
   },
   crm: {
     id: 'crm',
     phase: 6,
     label: 'CRM',
     enabledInPhase1: false,
-    notice: 'CRM Faz 6’da etkinleşecek.'
+    notice: 'CRM bu kurulumda henüz etkin değil.'
   },
   ads: {
     id: 'ads',
     phase: 6,
     label: 'Reklam Yönetimi',
     enabledInPhase1: false,
-    notice: 'Reklam yönetimi Faz 6’da etkinleşecek.'
+    notice: 'Reklam yönetimi bu kurulumda henüz etkin değil.'
   },
   commerce: {
     id: 'commerce',
     phase: 6,
     label: 'Ticaret Entegrasyonları',
     enabledInPhase1: false,
-    notice: 'Ticaret entegrasyonları Faz 6’da etkinleşecek.'
+    notice: 'Ticaret entegrasyonları bu kurulumda henüz etkin değil.'
   },
   attribution: {
     id: 'attribution',
     phase: 6,
     label: 'Atıf Analizi',
     enabledInPhase1: false,
-    notice: 'Atıf analizi Faz 6’da etkinleşecek.'
+    notice: 'Atıf analizi bu kurulumda henüz etkin değil.'
   }
 };
 
