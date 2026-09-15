@@ -17,3 +17,6 @@ next-env.d.ts
 # Test veritabanı
 prisma/test.db
 prisma/test.db-journal
+
+# Prisma 7: üretilen istemci kodu (npm run db:generate ile oluşturulur)
+/src/generated/

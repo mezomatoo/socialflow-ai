@@ -14,12 +14,17 @@
 // =============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  // Prisma 7 üretken istemci (Rust'suz): sorgu derleyicisi WASM + sürücü adaptörü.
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
+  // Bağlantı adresi Prisma 7'de burada değil `prisma.config.ts` içinde tutulur
+  // (CLI komutları için) ve uygulama `src/lib/prisma.ts` içindeki sürücü
+  // adaptörüyle bağlanır. PostgreSQL'e geçiş: provider = "postgresql" yapın,
+  // DATABASE_URL'i `postgresql://...` olarak verin; adaptör otomatik seçilir.
   provider = "sqlite" // PG: "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // -----------------------------------------------------------------------------

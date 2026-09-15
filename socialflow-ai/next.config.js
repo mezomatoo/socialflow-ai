@@ -5,7 +5,11 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   images: { unoptimized: true },
-  experimental: { serverComponentsExternalPackages: ['@prisma/client'] },
+  experimental: {
+    // Sürücü adaptörleri ve Prisma istemcisi sunucu tarafında çalışır;
+    // webpack ile paketlenmemelidir (libsql/pg yerel modüller içerir).
+    serverComponentsExternalPackages: ['@prisma/client', '@libsql/client', 'libsql', '@prisma/adapter-libsql', 'pg']
+  },
   // Canlı önizleme / proxy üzerinden gelen cross-origin dev isteklerine izin ver
   // (ör. https://3000-<sandbox>.e2b.app → /_next/* kaynakları).
   allowedDevOrigins: ['*.e2b.app', 'localhost', '127.0.0.1'],
