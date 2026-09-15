@@ -40,9 +40,11 @@ export function AppShell({
   user,
   branding,
   inboxEnabled = true,
+  advertisingEnabled = false,
   children
 }: {
   inboxEnabled?: boolean;
+  advertisingEnabled?: boolean;
   user: ShellUser;
   branding: ShellBranding;
   children: React.ReactNode;
@@ -154,7 +156,7 @@ export function AppShell({
         </div>
 
         <nav className="no-scrollbar flex-1 overflow-y-auto px-3 py-4">
-          {NAV_GROUPS.filter(group => inboxEnabled || group.id !== 'community').map((group) => (
+          {NAV_GROUPS.filter(group => (inboxEnabled || group.id !== 'community') && (advertisingEnabled || group.id !== 'advertising')).map((group) => (
             <div key={group.id} className="mb-5 last:mb-0">
               <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-faint">{group.label}</p>
               <ul className="space-y-0.5">

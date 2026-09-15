@@ -1,3 +1,4 @@
+import { canAdvertising } from '@/lib/advertising/permissions';
 import { isFeatureEnabled } from '@/lib/brandkit/featureFlags';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
@@ -19,6 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ToastProvider>
         <AppShell
           inboxEnabled={isFeatureEnabled('unifiedInbox')}
+          advertisingEnabled={isFeatureEnabled('paidMedia') && canAdvertising(session.user.role, 'ads:view')}
           user={{
             id: session.user.id,
             name: session.user.name,
