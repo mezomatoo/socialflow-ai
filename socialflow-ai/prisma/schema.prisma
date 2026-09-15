@@ -59,6 +59,10 @@ model User {
   sessions       Session[]
 
   @@index([workspaceId])
+  inboxAssignments ConversationAssignment[]
+  ownedLeads Lead[]
+  @@unique([workspaceId, id])
+
 }
 
 // Sunucu taraflı oturumlar. Tarayıcıda yalnızca HttpOnly+SameSite=Lax çerez
@@ -111,6 +115,10 @@ model Workspace {
   integrationState ProviderIntegration[]
 
   @@index([slug])
+  adAccounts AdAccount[]
+  products Product[]
+  contacts Contact[]
+
 }
 
 // Uygulama markası (ad, logo, renkler) — Admin Ayarları'ndan düzenlenebilir.
@@ -171,6 +179,13 @@ model Brand {
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
+  conversations SocialConversation[]
+  @@unique([workspaceId, id])
+
+  adAccounts AdAccount[]
+  products Product[]
+  contacts Contact[]
+
 }
 
 // Marka sesi: AI uyarlamasının "ton" girdisi.
@@ -221,6 +236,11 @@ model SocialAccount {
 
   @@unique([workspaceId, platform, handle])
   @@index([workspaceId, platform])
+  conversations SocialConversation[]
+  participants SocialParticipant[]
+  inboxEvents InboxEvent[]
+  @@unique([workspaceId, id])
+
 }
 
 // Token'lar asla tarayıcıya gönderilmez; AES-256-GCM ile şifrelenerek saklanır.
@@ -653,6 +673,8 @@ model Campaign {
   contents  Content[]
   analytics AnalyticsSnapshot[]
 
+  leads Lead[]
+  @@unique([workspaceId, id])
   @@unique([workspaceId, code])
 }
 
@@ -762,6 +784,9 @@ model Job {
 
 // OAuth "state" doğrulaması (CSRF koruması). Kısa ömürlü, tek kullanımlık.
 model OAuthState {
+  socialAccountId String?
+  redirectUri String?
+  accountUpdatedAt DateTime?
   id           String    @id @default(cuid())
   state        String    @unique
   platform     String
@@ -1345,4 +1370,285 @@ model PlatformRuleVersion {
 
   @@unique([platformRuleId, version])
   @@index([workspaceId, platform, contentType])
+
+// PHASE 5 — additive inbox foundation. No publishing/token tables replaced.
+model SocialParticipant {
+  id                    String @id @default(cuid())
+  workspaceId           String
+  socialAccountId       String
+  providerParticipantId String
+  displayName           String
+  firstSeenAt           DateTime @default(now())
+  lastSeenAt            DateTime @default(now())
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  conversations SocialConversation[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, socialAccountId, providerParticipantId])
+}
+
+model SocialConversation {
+  id                     String @id @default(cuid())
+  workspaceId            String
+  brandId                String
+  socialAccountId        String
+  participantId          String
+  provider               String
+  providerConversationId String
+  source                 String @default("MANUAL")
+  type                   String
+  status                 String @default("NEW")
+  priority               String @default("NORMAL")
+  assignedTo             String?
+  version                Int @default(1)
+  firstMessageAt         DateTime @default(now())
+  lastMessageAt          DateTime @default(now())
+  resolvedAt             DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  participant SocialParticipant @relation(fields: [workspaceId, participantId], references: [workspaceId, id], onDelete: Restrict)
+  messages SocialMessage[]
+  assignments ConversationAssignment[]
+  contactLink ContactConversationLink?
+  tags ConversationTag[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, socialAccountId, providerConversationId])
+  @@index([workspaceId, status, lastMessageAt])
+  @@index([workspaceId, assignedTo])
+}
+
+model SocialMessage {
+  id                String @id @default(cuid())
+  workspaceId       String
+  conversationId    String
+  providerMessageId String
+  direction         String // INBOUND | OUTBOUND | INTERNAL; INTERNAL never transported
+  messageType       String @default("TEXT")
+  sender            String
+  text              String
+  sentAt            DateTime
+  receivedAt        DateTime @default(now())
+  isRead            Boolean @default(false)
+  createdAt         DateTime @default(now())
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([conversationId, providerMessageId])
+  @@index([workspaceId, conversationId, sentAt])
+}
+
+model ConversationAssignment {
+  id             String @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  assignedTo     String?
+  assignedBy     String
+  createdAt      DateTime @default(now())
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  actor User @relation(fields: [workspaceId, assignedBy], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, conversationId, createdAt])
+}
+
+model ConversationTag {
+  id             String @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  name           String
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([conversationId, name])
+  @@index([workspaceId, name])
+}
+
+// Minimal normalized payload only; no raw tokens or unfiltered provider payloads.
+model InboxEvent {
+  id              String @id @default(cuid())
+  workspaceId     String
+  socialAccountId String
+  eventKey        String
+  source          String @default("MANUAL")
+  payload         String
+  payloadHash     String
+  status          String @default("QUEUED")
+  conversationId  String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+  account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, eventKey])
+  @@index([workspaceId, status])
+}
+
+
+// PHASE 6 — Paid account isolation. Never reuse/overwrite SocialProviderToken.
+model AdAccount {
+  id                  String @id @default(cuid())
+  workspaceId         String
+  brandId             String?
+  provider            String
+  providerAccountId   String
+  displayName         String
+  currency            String?
+  timezone            String?
+  providerTimezone    String?
+  connectionStatus    String @default("UNVERIFIED")
+  grantedScopes       String @default("[]")
+  version             Int @default(1)
+  lastValidatedAt     DateTime?
+  lastAccountSyncAt   DateTime?
+  lastCampaignSyncAt  DateTime?
+  lastMetricsSyncAt   DateTime?
+  lastConversionSyncAt DateTime?
+  lastCatalogSyncAt   DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand? @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  credential AdAccountCredential?
+  capabilitySnapshots AdProviderCapability[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider, connectionStatus])
+}
+
+// Tokens are encrypted with existing crypto helpers by a future verified OAuth flow only.
+model AdAccountCredential {
+  id              String @id @default(cuid())
+  workspaceId     String
+  adAccountId     String @unique
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  lastRotatedAt   DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, adAccountId])
+}
+
+// Append-only capability evidence; no mutation/public import endpoint in this stage.
+model AdProviderCapability {
+  id           String @id @default(cuid())
+  workspaceId  String
+  adAccountId  String
+  version      Int
+  apiVersion   String?
+  capabilities String @default("{}")
+  source       String @default("UNVERIFIED")
+  verifiedAt   DateTime?
+  createdAt    DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([adAccountId, version])
+  @@index([workspaceId, adAccountId, createdAt])
+}
+
+// Central product truth. No provider catalog or second commerce product model.
+model Product {
+  id String @id @default(cuid())
+  workspaceId String
+  brandId String
+  name String
+  description String @default("")
+  status String @default("ACTIVE")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  variants ProductVariant[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, brandId, status])
+}
+
+model ProductVariant {
+  id String @id @default(cuid())
+  workspaceId String
+  productId String
+  sku String
+  name String
+  // Integer minor units; null means unknown, not free. Currency scale is stored.
+  priceMinor Int?
+  currency String
+  currencyScale Int
+  stock Int?
+  version Int @default(1)
+  source String @default("USER_PROVIDED")
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [workspaceId, productId], references: [workspaceId, id], onDelete: Restrict)
+  inventory InventoryMovement[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sku])
+  @@index([workspaceId, productId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  workspaceId String
+  variantId String
+  fromStock Int?
+  toStock Int
+  reason String
+  actorId String
+  createdAt DateTime @default(now())
+  variant ProductVariant @relation(fields: [workspaceId, variantId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, variantId, createdAt])
+}
+
+model Contact {
+  id String @id @default(cuid())
+  workspaceId String
+  brandId String
+  name String
+  email String?
+  phone String?
+  source String @default("USER_PROVIDED")
+  status String @default("ACTIVE")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  leads Lead[]
+  conversations ContactConversationLink[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, brandId, status])
+}
+model Lead {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  campaignId String?
+  ownerId String?
+  title String
+  stage String @default("NEW")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  campaign Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Restrict)
+  owner User? @relation(fields: [workspaceId, ownerId], references: [workspaceId, id], onDelete: Restrict)
+  activities LeadActivity[]
+  @@unique([workspaceId, id])
+  @@index([workspaceId, stage, updatedAt])
+}
+model LeadActivity {
+  id String @id @default(cuid())
+  workspaceId String
+  leadId String
+  actorId String
+  type String
+  text String
+  createdAt DateTime @default(now())
+  lead Lead @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Restrict)
+  @@index([workspaceId, leadId, createdAt])
+}
+model ContactConversationLink {
+  id String @id @default(cuid())
+  workspaceId String
+  contactId String
+  conversationId String @unique
+  actorId String
+  createdAt DateTime @default(now())
+  contact Contact @relation(fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict)
+  conversation SocialConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, conversationId])
+  @@index([workspaceId, contactId])
 }

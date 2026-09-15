@@ -1,3 +1,4 @@
+import { unavailableEngagement } from './engagement';
 import { PLATFORM_META, type ContentType, type PlatformCode } from '../platforms/platforms';
 import type { PlatformRuleView } from '../rules/ruleEngine';
 import { charLength, weightedLength } from '../text';
@@ -25,6 +26,8 @@ import type {
  *  - Zamanlama (schedulePost) için varsayılan davranış
  */
 export abstract class BaseSocialProvider implements SocialProvider {
+  getEngagementCapabilities() { return unavailableEngagement(); }
+
   abstract readonly platform: PlatformCode;
   readonly apiVersion: string;
 

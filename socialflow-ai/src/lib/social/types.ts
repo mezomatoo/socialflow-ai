@@ -146,6 +146,7 @@ export interface MediaValidationInput {
  * SocialProvider — tüm platform adaptörlerinin uyguladığı arayüz.
  */
 export interface SocialProvider {
+  getEngagementCapabilities(): import('./engagement').EngagementCapabilities;
   readonly platform: PlatformCode;
   readonly label: string;
   readonly apiVersion: string;

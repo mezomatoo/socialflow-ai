@@ -6,6 +6,7 @@
  */
 
 const PATHS: Record<string, React.ReactNode> = {
+  inbox: <><path d="M4 4h16l2 11v5H2v-5L4 4Z" /><path d="M2 15h6l2 3h4l2-3h6" /></>,
   home: <path d="M3 10.5 12 3l9 7.5M5.5 9.5V20h13V9.5" />,
   plus: <path d="M12 5v14M5 12h14" />,
   calendar: (

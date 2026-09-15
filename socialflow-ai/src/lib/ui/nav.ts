@@ -1,10 +1,9 @@
 /**
  * Sol menü yapısı — tamamı Türkçe (§22).
  * ---------------------------------------------------------------------------
- * Phase 1 menüsü sade tutulur: yalnızca tamamlanmış modüller gösterilir.
- * Sonraki fazlarda gelecek modüller ayrı bir grupta toplanır ve "Faz 2+"
- * etiketiyle işaretlenir; böylece uygulama henüz çalışmayan bir modülü
- * çalışıyor gibi göstermez (§22).
+ * Entegre menü: Faz 1 çekirdeği (474), Gelen Kutusu + Reklamlar (3eb) ve
+ * AI modülleri (0d6) tek yapıda birleştirilir. Henüz çalışmayan bir modül
+ * çalışıyormuş gibi gösterilmez (§22); kapı kararları phaseGates.ts'tedir.
  */
 
 export type NavPhase = 'phase1' | 'phase2';
@@ -70,6 +69,21 @@ export const NAV_GROUPS: { id: string; label: string; phase: NavPhase; items: Na
         phase: 'phase2'
       }
     ]
+  },
+  {
+    id: 'community',
+    label: 'Topluluk',
+    phase: 'phase2',
+    items: [{ href: '/app/gelen-kutusu', label: 'Gelen Kutusu', icon: 'inbox', group: 'community', phase: 'phase2' }]
+  },
+  {
+    id: 'advertising',
+    label: 'Reklamlar',
+    phase: 'phase2',
+    items: [
+      { href: '/app/reklamlar', label: 'Reklam Özeti', icon: 'chart', group: 'advertising', phase: 'phase2' },
+      { href: '/app/reklamlar/hesaplar', label: 'Reklam Hesapları', icon: 'users', group: 'advertising', phase: 'phase2' }
+    ]
   }
 ];
 
@@ -100,7 +114,8 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   '/bildirimler': '/app/bildirimler',
   '/ai-asistan': '/app/ai-asistan',
   '/ayarlar': '/app/ayarlar',
-  '/marka-kiti': '/app/marka-kiti'
+  '/marka-kiti': '/app/marka-kiti',
+  '/gelen-kutusu': '/app/gelen-kutusu'
 };
 
 export function legacyRedirectFor(pathname: string): string | null {

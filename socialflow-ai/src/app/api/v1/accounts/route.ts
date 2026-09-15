@@ -1,5 +1,6 @@
-import { apiRoute, ok, badRequest } from '@/lib/api';
 import { assertModuleEnabled } from '@/lib/phase/phaseGates';
+import { AccountRegistrationError, registerAccount } from '@/lib/services/accountRegistrationService';
+import { apiRoute, ok, fail } from '@/lib/api';
 import prisma from '@/lib/prisma';
 import { CONNECTION_STATUS_LABELS } from '@/lib/platforms/platforms';
 
@@ -37,33 +38,15 @@ export const GET = apiRoute(async (_request, { session }) => {
   });
 });
 
-/** Demo hesabı ekle / hesap bilgilerini güncelle. */
-export const POST = apiRoute(
-  async (request, { session }) => {
-    const body = await request.json().catch(() => ({}));
-    if (!body.platform || !body.handle) return badRequest('Platform ve kullanıcı adı zorunludur.');
-
-    const existing = await prisma.socialAccount.findFirst({
-      where: { workspaceId: session.user.workspaceId, platform: String(body.platform), handle: String(body.handle) }
-    });
-    if (existing) return badRequest('Bu hesap zaten bağlı.');
-
-    const account = await prisma.socialAccount.create({
-      data: {
-        workspaceId: session.user.workspaceId,
-        brandId: body.brandId ? String(body.brandId) : null,
-        platform: String(body.platform),
-        handle: String(body.handle),
-        displayName: body.displayName ? String(body.displayName) : String(body.handle),
-        avatarUrl: body.avatarUrl ? String(body.avatarUrl) : null,
-        accountType: body.accountType ? String(body.accountType) : 'PROFILE',
-        connectionStatus: 'ACTIVE',
-        demoAccount: body.demoAccount !== false,
-        scopes: Array.isArray(body.scopes) ? body.scopes.join(',') : '',
-        externalId: body.externalId ? String(body.externalId) : null
-      }
-    });
-    return ok({ id: account.id });
-  },
-  { limit: 30 }
-);
+/** Local target only; real connection is confirmed by OAuth, never by client input. */
+export const POST = apiRoute(async (request, { session }) => {
+  try {
+    const body = await request.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return fail('INVALID_INPUT', 'Geçersiz istek.', 400);
+    return ok(await registerAccount(session, body), { status: 201 });
+  } catch (error) {
+    if (error instanceof AccountRegistrationError) return fail('ACCOUNT_REGISTRATION', error.message, error.status);
+    if (error instanceof SyntaxError) return fail('INVALID_INPUT', 'Geçersiz JSON gövdesi.', 400);
+    return fail('ACCOUNT_REGISTRATION', 'Hesap eklenemedi. Lütfen tekrar deneyin.', 500);
+  }
+}, { limit: 30, sessionCsrf: true });

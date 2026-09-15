@@ -15,7 +15,16 @@
     "db:studio": "node scripts/prisma-cli.mjs studio",
     "prisma": "node scripts/prisma-cli.mjs",
     "test:setup": "node scripts/test-setup.mjs",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "worker": "tsx scripts/worker.ts",
+    "test:core": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/critical-path.test.ts tests/partial-failure.test.ts tests/brandkit.test.ts",
+    "test:inbox": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/inbox.test.ts",
+    "test:oauth": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/oauth-state.test.ts",
+    "test:instagram": "DATABASE_URL=\"file:./prisma/test.db\" DEMO_MODE=false APP_URL=https://oauth-test.invalid INSTAGRAM_APP_ID=test-only INSTAGRAM_APP_SECRET=test-only tsx --test tests/instagram-connection.test.ts",
+    "test:accounts": "DATABASE_URL=\"file:./prisma/test.db\" DEMO_MODE=false tsx --test tests/account-registration.test.ts",
+    "test:advertising:contracts": "tsx --test tests/advertising-contracts.test.ts",
+    "test:advertising": "DATABASE_URL=\"file:./prisma/test.db\" tsx --test tests/advertising-contracts.test.ts tests/advertising-service.test.ts",
+    "test:removed-modules": "tsx --test tests/removed-modules.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

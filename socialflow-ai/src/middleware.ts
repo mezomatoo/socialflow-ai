@@ -9,7 +9,7 @@ import { legacyRedirectFor } from '@/lib/ui/nav';
  * (çalışma alanı izolasyonu dahil).
  */
 
-/** Oturum gerektiren yol önekleri (§21). */
+/** Oturum gerektiren yol önekleri (§21). Eski yollar önce legacyRedirectFor ile yeni yapıya yönlenir. */
 const PROTECTED_PREFIXES = ['/app'];
 
 /** Oturum açmış kullanıcıyı panele yönlendiren sayfalar. */

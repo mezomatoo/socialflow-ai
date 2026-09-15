@@ -30,7 +30,7 @@ const STATUS: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral
   EXPIRED: { tone: 'warning', label: 'Süresi Doldu' },
   REVOKED: { tone: 'danger', label: 'Bağlantı Kesildi' },
   ERROR: { tone: 'danger', label: 'Hata' },
-  NEEDS_REAUTH: { tone: 'warning', label: 'Yeniden Yetkilendirme' }
+  NEEDS_REAUTH: { tone: 'warning', label: 'Yetkilendirme Gerekli' }
 };
 
 const ACCOUNT_TYPES: Record<string, string> = {
@@ -44,12 +44,14 @@ export function AccountsView({
   items: initial,
   brands,
   platforms,
-  demoMode
+  demoMode,
+  connectionResult
 }: {
   items: AccountItem[];
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
+  connectionResult?: string | null;
 }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
@@ -129,6 +131,8 @@ export function AccountsView({
           <Icon name="plus" size={16} /> Hesap Bağla
         </button>
       </div>
+
+      {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
 
       {demoMode && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
@@ -224,9 +228,9 @@ export function AccountsView({
                           ))}
                         </select>
                         <div className="ml-auto flex items-center gap-1">
-                          {a.connectionStatus !== 'ACTIVE' && (
+                          {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
-                              <Icon name="refresh" size={13} /> Yeniden Bağla
+                              <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
                             </button>
                           )}
                           <button className="btn-ghost btn-sm" title="Bağlantıyı kaldır" disabled={busyId === a.id} onClick={() => remove(a)}>
@@ -287,7 +291,7 @@ function AddAccountModal({
     }
     setSaving(true);
     try {
-      const res = await api.post<{ id: string }>('/api/accounts', {
+      const res = await api.post<{ id: string; handle: string; demoAccount: boolean; connectionStatus: string }>('/api/accounts', {
         platform,
         handle: handle.trim().replace(/^@/, ''),
         displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
@@ -299,12 +303,12 @@ function AddAccountModal({
       onCreated({
         id: res.id,
         platform,
-        handle: handle.trim().replace(/^@/, ''),
+        handle: res.handle,
         displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
         avatarUrl: null,
         accountType,
-        connectionStatus: 'ACTIVE',
-        demoAccount: demoMode,
+        connectionStatus: res.connectionStatus,
+        demoAccount: res.demoAccount,
         lastError: null,
         brandId: brandId || null,
         brandName: brand?.name ?? null,
@@ -312,7 +316,7 @@ function AddAccountModal({
         externalId: null,
         tokenExpiresAt: null
       });
-      toast.success('Hesap eklendi', demoMode ? 'Demo hesabı olarak bağlandı.' : 'Bağlantı kuruldu.');
+      toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
     } catch (e) {
       toast.error('Eklenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {

@@ -162,7 +162,7 @@ export async function destroySession() {
       .updateMany({ where: { tokenHash: sha256(raw) }, data: { revokedAt: new Date() } })
       .catch(() => undefined);
   }
-  const res = NextResponse.next();
+  const res = NextResponse.json({ ok: true, data: { loggedOut: true } });
   res.cookies.set(SESSION_COOKIE, '', { ...cookieOptions(true), maxAge: 0 });
   res.cookies.set(CSRF_COOKIE, '', { ...cookieOptions(false), maxAge: 0 });
   return res;

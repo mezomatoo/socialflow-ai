@@ -9,6 +9,11 @@ import type { PlatformCode } from '../../platforms/platforms';
  * Gereksinim: Instagram Business/Creator hesabı + bağlı Facebook Sayfası.
  * Akış: medya container oluştur → yayınla → durum sorgula.
  */
+export const INSTAGRAM_PUBLISH_SCOPES = [
+  'instagram_basic', 'instagram_content_publish', 'instagram_manage_insights',
+  'pages_show_list', 'pages_read_engagement', 'business_management'
+];
+
 export class InstagramProvider extends OAuth2Provider {
   readonly platform = 'INSTAGRAM' as PlatformCode;
 
@@ -22,43 +27,51 @@ export class InstagramProvider extends OAuth2Provider {
       tokenUrl: 'https://graph.facebook.com/v21.0/oauth/access_token',
       clientId: env.providers.INSTAGRAM.id,
       clientSecret: env.providers.INSTAGRAM.secret,
-      scopes: [
-        'instagram_basic',
-        'instagram_content_publish',
-        'instagram_manage_insights',
-        'pages_show_list',
-        'pages_read_engagement',
-        'business_management'
-      ],
+      scopes: [...INSTAGRAM_PUBLISH_SCOPES],
       scopeSeparator: ',',
       extraAuthParams: { auth_type: 'rerequest' }
     };
   }
 
+  /** Meta permission status is authoritative; requested scopes are not granted scopes. */
+  async fetchGrantedPermissions(accessToken: string): Promise<string[]> {
+    const items = await this.readConnectionPages('me/permissions', {}, accessToken);
+    return items.filter(item => item.status === 'granted' && typeof item.permission === 'string')
+      .map(item => item.permission);
+  }
+
+  /** Fixed-origin cursor paging: never follow provider-supplied next URLs with a token. */
+  private async readConnectionPages(path: string, params: Record<string, string>, accessToken: string): Promise<any[]> {
+    const result: any[] = [];
+    let after: string | undefined;
+    const seen = new Set<string>();
+    for (let page = 0; page < 20; page++) {
+      const url = new URL(`https://graph.facebook.com/${this.apiVersion}/${path}`);
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      url.searchParams.set('limit', '100');
+      if (after) url.searchParams.set('after', after);
+      const response = await this.request<any>(url.toString(), { accessToken, signal: AbortSignal.timeout(15_000), redirect: 'error' });
+      if (!response.ok || !Array.isArray(response.data?.data)) throw new Error('Instagram bağlantı bilgileri doğrulanamadı.');
+      result.push(...response.data.data);
+      if (!response.data.paging?.next) return result;
+      const cursor = response.data.paging?.cursors?.after;
+      if (typeof cursor !== 'string' || !cursor || cursor.length > 4096 || seen.has(cursor)) throw new Error('Instagram sayfalama bilgisi geçersiz.');
+      after = cursor; seen.add(cursor);
+    }
+    throw new Error('Hesap listesi güvenli sayfalama sınırını aşıyor.');
+  }
+
   async fetchAccountProfiles(accessToken: string): Promise<AccountProfile[]> {
-    const me = await this.request<any>(
-      'https://graph.facebook.com/v21.0/me/accounts?fields=id,name,picture,access_token,instagram_business_account{id,username,profile_picture_url,followers_count}',
-      { accessToken }
-    );
-    if (!me.ok) throw new Error(me.error ?? 'Instagram hesapları alınamadı.');
-    const pages = me.data?.data ?? [];
-    const out: AccountProfile[] = [];
-    for (const page of pages) {
-      const ig = page.instagram_business_account;
-      if (!ig) continue;
-      out.push({
-        externalId: String(ig.id),
-        handle: `@${ig.username ?? page.name}`,
-        displayName: page.name,
-        avatarUrl: ig.profile_picture_url ?? page.picture?.data?.url ?? null,
-        accountType: 'BUSINESS',
-        followers: ig.followers_count ?? null
-      });
-    }
-    if (!out.length) {
-      throw new Error('Bu Facebook hesabına bağlı bir Instagram işletme hesabı bulunamadı.');
-    }
-    return out;
+    const pages = await this.readConnectionPages('me/accounts', {
+      fields: 'id,name,instagram_business_account{id,username,profile_picture_url}'
+    }, accessToken);
+    return pages.filter(page => page.instagram_business_account?.id && page.instagram_business_account?.username).map(page => ({
+      externalId: String(page.instagram_business_account.id),
+      handle: `@${page.instagram_business_account.username}`,
+      displayName: String(page.name || page.instagram_business_account.username),
+      avatarUrl: page.instagram_business_account.profile_picture_url || null,
+      accountType: 'BUSINESS'
+    }));
   }
 
   supports(contentType: ContentType): boolean {

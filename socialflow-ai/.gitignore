@@ -21,3 +21,6 @@ prisma/test.db-journal
 
 # Prisma 7: üretilen istemci kodu (npm run db:generate ile oluşturulur)
 /src/generated/
+
+# Yerel migration yedekleri (müşteri verisi Git'e girmez)
+prisma/backups/
