@@ -108,6 +108,14 @@ export interface PublishResult {
   retryable?: boolean;
   /** Sağlayıcı tarafından zamanlandıysa */
   providerScheduled?: boolean;
+  /**
+   * Faz 2: sağlayıcı isteği kabul etti ama içerik hâlâ PLATFORM TARAFINDA
+   * işleniyor (ör. video transcode). Bu durumda PUBLISHED SANILMAZ;
+   * SyncPublicationStatusJob sonucu sonra doğrular (§42, §51).
+   */
+  processing?: boolean;
+  /** Faz 2: normalleştirilmiş hata kodu (sağlayıcı direkt verebiliyorsa). */
+  normalizedCode?: string | null;
   raw?: unknown;
 }
 
