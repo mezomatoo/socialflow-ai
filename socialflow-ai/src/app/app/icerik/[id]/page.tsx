@@ -23,6 +23,44 @@ export default async function ComposerPage({ params }: { params: { id: string } 
     orderBy: { createdAt: 'asc' }
   });
 
+  // Faz 2: hedef bazlı yayın geçmişi (denemeler + anlık görüntü) — §61
+  const publications = await prisma.publication.findMany({
+    where: { platformContentId: { in: detail.platformContents.map((pc: any) => pc.id) } },
+    include: { attemptsLog: { orderBy: { attempt: 'desc' } }, snapshot: true }
+  });
+  const publicationHistory: Record<string, any> = {};
+  for (const pub of publications) {
+    publicationHistory[pub.platformContentId] = {
+      status: pub.status,
+      attempts: pub.attempts,
+      lastError: pub.lastError,
+      normalizedErrorCode: pub.normalizedErrorCode,
+      publishedAt: pub.publishedAt ? pub.publishedAt.toISOString() : null,
+      permalink: pub.permalink,
+      providerPostId: pub.providerPostId,
+      demoMode: pub.demoMode,
+      snapshot: pub.snapshot
+        ? {
+            caption: pub.snapshot.caption,
+            contentVersion: pub.snapshot.contentVersion,
+            platformRuleVersion: pub.snapshot.platformRuleVersion,
+            accountHandle: pub.snapshot.accountHandle,
+            mediaKind: pub.snapshot.mediaKind,
+            createdAt: pub.snapshot.createdAt.toISOString()
+          }
+        : null,
+      attemptsLog: pub.attemptsLog.map((a) => ({
+        attempt: a.attempt,
+        ok: a.ok,
+        providerCode: a.providerCode,
+        normalizedCode: a.normalizedCode,
+        friendlyMessage: a.friendlyMessage,
+        durationMs: a.durationMs,
+        createdAt: a.createdAt.toISOString()
+      }))
+    };
+  }
+
   const platforms = PLATFORM_LIST.map((p) => ({
     code: p.code,
     name: p.name,
@@ -60,6 +98,7 @@ export default async function ComposerPage({ params }: { params: { id: string } 
       demoMode={session.user.demoMode}
       role={session.user.role}
       modules={moduleState()}
+      publicationHistory={publicationHistory}
     />
   );
 }
