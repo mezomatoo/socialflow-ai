@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
 import { getContentDetail } from '@/lib/services/contentService';
 import { PLATFORM_LIST } from '@/lib/platforms/platforms';
+import { moduleState } from '@/lib/phase/phaseGates';
 import { ComposerView } from './ComposerView';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,7 @@ export default async function ComposerPage({ params }: { params: { id: string } 
       timezone={session.user.timezone}
       demoMode={session.user.demoMode}
       role={session.user.role}
+      modules={moduleState()}
     />
   );
 }

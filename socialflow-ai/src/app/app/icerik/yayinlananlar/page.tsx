@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { fetchBrandOptions, fetchContentList } from '@/lib/services/contentListServer';
+import { isModuleEnabled } from '@/lib/phase/phaseGates';
+import { PhaseGateNotice } from '@/components/ui/PhaseNotice';
 import { ContentListView } from '@/components/content/ContentListView';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +11,10 @@ export const metadata = { title: 'Yayınlananlar' };
 export default async function PublishedPage() {
   const session = await getSession();
   if (!session) redirect('/giris');
+  // Faz kapısı (§3): modül kapalıysa çalışıyormuş gibi gösterilmez.
+  if (!isModuleEnabled('socialPublishing')) {
+    return <PhaseGateNotice module="socialPublishing" phase1Alternatives={[{ href: '/app/icerik/taslaklar', label: 'Taslaklar' }]} />;
+  }
   const ws = session.user.workspaceId;
 
   const [items, brands] = await Promise.all([

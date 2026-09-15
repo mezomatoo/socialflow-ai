@@ -1,4 +1,5 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 import { publishContent } from '@/lib/social/publishingService';
 import { runPreflight } from '@/lib/services/validationService';
@@ -7,6 +8,7 @@ import { audit } from '@/lib/security/audit';
 /** "Şimdi Yayınla" — tüm hedefleri sırayla yayınlar (kısmi başarı korunur). */
 export const POST = apiRoute(
   async (request, { session, params }) => {
+    assertModuleEnabled('socialPublishing');
     const content = await prisma.content.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
     if (!content) return badRequest('İçerik bulunamadı.');
 

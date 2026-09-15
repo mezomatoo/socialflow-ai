@@ -1,9 +1,11 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 import { CONNECTION_STATUS_LABELS } from '@/lib/platforms/platforms';
 
 /** Bağlı sosyal medya hesapları. Token'lar ASLA dönmez. */
 export const GET = apiRoute(async (_request, { session }) => {
+    assertModuleEnabled('socialAccounts');
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId: session.user.workspaceId },
     include: {

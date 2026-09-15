@@ -1,4 +1,5 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 import { getProvider, isDemoProvider } from '@/lib/social/registry';
 import { createOAuthState } from '@/lib/social/oauth2';
@@ -12,6 +13,7 @@ import type { PlatformCode } from '@/lib/platforms/platforms';
  */
 export const POST = apiRoute(
   async (request, { session, params }) => {
+    assertModuleEnabled('socialAccounts');
     const account = await prisma.socialAccount.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
     if (!account) return badRequest('Hesap bulunamadı.');
 

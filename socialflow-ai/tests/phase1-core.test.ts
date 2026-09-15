@@ -21,6 +21,7 @@ import { getRule, updateRule } from '../src/lib/rules/ruleEngine';
 import { createMediaVariant, listMediaVariants, mediaUsage, deleteMediaVariant, findVariant } from '../src/lib/services/mediaProcessingService';
 import { deleteMedia } from '../src/lib/services/mediaService';
 import { AppError } from '../src/lib/errors';
+import { assertModuleEnabled, isModuleEnabled, moduleState, moduleNotice, MODULE_GATES } from '../src/lib/phase/phaseGates';
 
 /** 1x1 PNG — tarayıcı gerektirmeyen en küçük geçerli görsel. */
 const TINY_PNG = Buffer.from(
@@ -41,6 +42,7 @@ describe('Faz 1 — yapay zekâ soyutlaması ve zarif bozulma', () => {
       const { data, result } = await completeJson<{ x: number }>({
         system: 'test',
         user: 'test',
+        task: 'TEST',
         schema: { type: 'object' }
       });
       // Sağlayıcı yokken veri null döner; çağıran servis yerel üretime devam eder.
@@ -200,5 +202,43 @@ describe('Faz 1 — medya varyantları ve silme güvenliği', () => {
     );
     // Silme reddedildiğinde medya yerinde kalır.
     assert.ok(await prisma.mediaAsset.findUnique({ where: { id: mediaId } }));
+  });
+});
+
+describe('Faz 1 — kapsam kapıları (sahte çalışma yok)', () => {
+  it('Faz 2 modülleri varsayılan olarak kapalı ve dürüst mesaj veriyor', () => {
+    const state = moduleState();
+    assert.equal(state.socialPublishing.enabled, false);
+    assert.equal(state.scheduling.enabled, false);
+    assert.equal(state.socialAccounts.enabled, false);
+    assert.equal(state.analytics.enabled, false);
+    assert.ok(state.socialPublishing.notice.includes('Faz 2'));
+    assert.ok(moduleNotice('analytics').length > 10);
+  });
+
+  it('kapalı modül 501 (MODULE_NOT_ENABLED) hatası verir — sahte başarı yok', () => {
+    assert.throws(
+      () => assertModuleEnabled('socialPublishing'),
+      (err: unknown) => err instanceof AppError && err.code === 'MODULE_NOT_ENABLED' && err.status === 501
+    );
+  });
+
+  it('bayrak açıldığında modül etkinleşir (Faz 2 yolu korunmuş)', () => {
+    process.env.FF_SOCIAL_PUBLISHING = 'true';
+    try {
+      assert.equal(isModuleEnabled('socialPublishing'), true);
+      assert.doesNotThrow(() => assertModuleEnabled('socialPublishing'));
+    } finally {
+      delete process.env.FF_SOCIAL_PUBLISHING;
+    }
+    assert.equal(isModuleEnabled('socialPublishing'), false);
+  });
+
+  it('tüm kapılar faz numarası ve Türkçe etiket taşır', () => {
+    for (const [id, gate] of Object.entries(MODULE_GATES)) {
+      assert.ok(gate.label.length > 2, `${id} etiketi eksik`);
+      assert.ok(gate.phase >= 2);
+      assert.ok(gate.notice.length > 20, `${id} bilgilendirme metni kısa`);
+    }
   });
 });

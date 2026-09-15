@@ -145,7 +145,8 @@ export function ComposerView({
   platforms,
   timezone,
   demoMode,
-  role
+  role,
+  modules
 }: {
   content: any;
   accounts: Account[];
@@ -153,7 +154,12 @@ export function ComposerView({
   timezone: string;
   demoMode: boolean;
   role: string;
+  modules?: Record<string, { enabled: boolean; phase: number; label: string; notice: string }>;
 }) {
+  // Faz kapıları (§3): Faz 2+ modülleri çalışıyormuş gibi GÖSTERİLMEZ.
+  const publishingEnabled = modules?.socialPublishing?.enabled ?? false;
+  const schedulingEnabled = modules?.scheduling?.enabled ?? false;
+  const accountsEnabled = modules?.socialAccounts?.enabled ?? false;
   const router = useRouter();
   const toast = useToast();
   const [content, setContent] = useState<ContentDetail>(() => normalizeContent(initial));
@@ -283,15 +289,19 @@ export function ComposerView({
   async function adaptAll(preserveManual = true) {
     setAdapting(true);
     try {
-      const res = await api.post<{ results: any[]; content: any }>(`/api/contents/${content.id}/adapt`, { preserveManual });
+      const res = await api.post<{ results: any[]; content: any; aiNotice?: string | null }>(`/api/contents/${content.id}/adapt`, { preserveManual });
       setContent(normalizeContent(res.content));
       setAdaptedMaster(content.masterCaption);
       const shortened = res.results.filter((r) => r.shortened).length;
       const truncated = res.results.filter((r) => r.truncated).length;
-      toast.success(
-        'AI uyarlaması tamamlandı',
-        `${res.results.length} hedef uyarlandı.${shortened ? ` ${shortened} metin kısaltıldı.` : ''}${truncated ? ` ${truncated} metin sınıra takıldı, gözden geçirin.` : ''}`
-      );
+      const summary = `${res.results.length} hedef uyarlandı.${shortened ? ` ${shortened} metin kısaltıldı.` : ''}${truncated ? ` ${truncated} metin sınıra takıldı, gözden geçirin.` : ''}`;
+      if (res.aiNotice) {
+        // AI servisine ulaşılamadı: metinler yerel motorla üretildi, elle
+        // düzenleme ve kaydetme ENGELLENMEZ (§69).
+        toast.warning('AI servisine şu anda ulaşılamıyor', `${res.aiNotice} ${summary}`);
+      } else {
+        toast.success('AI uyarlaması tamamlandı', summary);
+      }
       if (preflight) validate();
     } catch (e) {
       toast.error('Uyarlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
@@ -309,13 +319,17 @@ export function ComposerView({
     }
     setAdapting(true);
     try {
-      const res = await api.post<{ results: any[]; content: any }>(`/api/contents/${content.id}/adapt`, {
+      const res = await api.post<{ results: any[]; content: any; aiNotice?: string | null }>(`/api/contents/${content.id}/adapt`, {
         targetIds: ids,
         preserveManual: false
       });
       setContent(normalizeContent(res.content));
       setAdaptedMaster(content.masterCaption);
-      toast.success('Seçili hedefler uyarlandı', `${res.results.length} hedef yeniden oluşturuldu.`);
+      if (res.aiNotice) {
+        toast.warning('AI servisine şu anda ulaşılamıyor', `${res.aiNotice} ${res.results.length} hedef yerel motorla yeniden oluşturuldu.`);
+      } else {
+        toast.success('Seçili hedefler uyarlandı', `${res.results.length} hedef yeniden oluşturuldu.`);
+      }
     } catch (e) {
       toast.error('Uyarlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
@@ -326,12 +340,16 @@ export function ComposerView({
   /* --- tek hedefi uyarla --- */
   async function adaptOne(t: Target) {
     try {
-      const res = await api.post<{ results: any[]; content: any }>(`/api/contents/${content.id}/adapt`, {
+      const res = await api.post<{ results: any[]; content: any; aiNotice?: string | null }>(`/api/contents/${content.id}/adapt`, {
         targetIds: [t.id],
         preserveManual: false
       });
       setContent(normalizeContent(res.content));
-      toast.success(`${metaName(t.platform)} uyarlandı`);
+      if (res.aiNotice) {
+        toast.warning('AI servisine şu anda ulaşılamıyor', `${metaName(t.platform)} yerel motorla uyarlandı. Metni dilediğiniz gibi düzenleyebilirsiniz.`);
+      } else {
+        toast.success(`${metaName(t.platform)} uyarlandı`);
+      }
     } catch (e) {
       toast.error('Uyarlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     }
@@ -439,16 +457,30 @@ export function ComposerView({
           <button className="btn-ghost btn-md" onClick={() => setVersionsOpen(true)}>
             <Icon name="history" size={15} /> Sürüm Geçmişi
           </button>
-          <button className="btn-ghost btn-md" onClick={() => setSchedOpen(true)} disabled={targets.length === 0}>
-            <Icon name="clock" size={15} /> Planla
-          </button>
-          <button className="btn-primary btn-md" onClick={() => setPublishOpen(true)} disabled={publishing || targets.length === 0}>
-            {publishing ? <Spinner size={15} /> : <Icon name="send" size={15} />} Şimdi Yayınla
-          </button>
+          {schedulingEnabled && (
+            <button className="btn-ghost btn-md" onClick={() => setSchedOpen(true)} disabled={targets.length === 0}>
+              <Icon name="clock" size={15} /> Planla
+            </button>
+          )}
+          {publishingEnabled && (
+            <button className="btn-primary btn-md" onClick={() => setPublishOpen(true)} disabled={publishing || targets.length === 0}>
+              {publishing ? <Spinner size={15} /> : <Icon name="send" size={15} />} Şimdi Yayınla
+            </button>
+          )}
         </div>
       </div>
 
-      {demoMode && (
+      {!publishingEnabled && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-2.5 text-[12.5px] text-ink">
+          <Icon name="info" size={15} className="text-info" />
+          <span>
+            <strong>Faz 1 — </strong>
+            {modules?.socialPublishing?.notice ??
+              'Gerçek sosyal medya yayını Faz 2’de etkinleşecek. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
+          </span>
+        </div>
+      )}
+      {publishingEnabled && demoMode && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5 text-[12.5px] text-ink">
           <Icon name="alert-triangle" size={15} className="text-warning" />
           <span><strong>Demo Modu —</strong> gerçek sosyal medya paylaşımı yapılmadı. Yayınlar simülasyon olarak işaretlenir.</span>
@@ -483,7 +515,7 @@ export function ComposerView({
         </div>
       )}
 
-      {failedCount > 0 && (
+      {failedCount > 0 && publishingEnabled && (
         <div className="mb-4 flex items-center gap-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3">
           <Icon name="x-circle" size={18} className="text-danger" />
           <p className="flex-1 text-[13px] font-medium text-ink">{failedCount} hedef yayınlanamadı.</p>
@@ -612,12 +644,16 @@ export function ComposerView({
             <button className="btn-secondary btn-md" onClick={validate} disabled={validating}>
               {validating ? <Spinner size={14} /> : <Icon name="shield" size={14} />} Kontrol
             </button>
-            <button className="btn-ghost btn-md" onClick={() => setSchedOpen(true)}>
-              <Icon name="clock" size={14} /> Planla
-            </button>
-            <button className="btn-primary btn-md" onClick={() => setPublishOpen(true)} disabled={publishing || targets.length === 0}>
-              {publishing ? <Spinner size={14} /> : <Icon name="send" size={14} />} Şimdi Yayınla
-            </button>
+            {schedulingEnabled && (
+              <button className="btn-ghost btn-md" onClick={() => setSchedOpen(true)}>
+                <Icon name="clock" size={14} /> Planla
+              </button>
+            )}
+            {publishingEnabled && (
+              <button className="btn-primary btn-md" onClick={() => setPublishOpen(true)} disabled={publishing || targets.length === 0}>
+                {publishing ? <Spinner size={14} /> : <Icon name="send" size={14} />} Şimdi Yayınla
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -626,13 +662,14 @@ export function ComposerView({
         <SelectionModal
           platforms={platforms}
           accounts={accounts}
+          accountsEnabled={accountsEnabled}
           targets={targets}
           onClose={() => setSelOpen(false)}
           onApply={applySelections}
         />
       )}
 
-      {schedOpen && (
+      {schedulingEnabled && schedOpen && (
         <ScheduleModal
           content={content}
           timezone={timezone}
@@ -646,7 +683,7 @@ export function ComposerView({
         />
       )}
 
-      {publishOpen && (
+      {publishingEnabled && publishOpen && (
         <PublishConfirmModal
           content={content}
           targets={targets}
@@ -857,12 +894,14 @@ function TargetCard({
 function SelectionModal({
   platforms,
   accounts,
+  accountsEnabled,
   targets,
   onClose,
   onApply
 }: {
   platforms: PlatformDef[];
   accounts: Account[];
+  accountsEnabled: boolean;
   targets: Target[];
   onClose: () => void;
   onApply: (sel: { platform: string; contentType: string; accountId: string | null }[]) => void;
@@ -899,12 +938,20 @@ function SelectionModal({
       }
     >
       <div className="space-y-3">
+        {!accountsEnabled && (
+          <p className="rounded-xl border border-info/30 bg-info/10 px-3 py-2 text-[12.5px] text-ink">
+            Hesap bağlama Faz 2’de etkinleşecek. Faz 1’de hedefleri hesap
+            seçmeden de hazırlayabilirsiniz.
+          </p>
+        )}
         {platforms.map((p) => (
           <div key={p.code} className="rounded-xl border border-line p-3">
             <div className="mb-2 flex items-center gap-2">
               <PlatformIcon platform={p.code} size={22} rounded="md" />
               <span className="text-[13.5px] font-bold text-ink">{p.name}</span>
-              {!accounts.some((a) => a.platform === p.code) && <Badge tone="warning">Bağlı hesap yok</Badge>}
+              {!accounts.some((a) => a.platform === p.code) && (
+                <Badge tone="warning">{accountsEnabled ? 'Bağlı hesap yok' : 'Hesap bağlama Faz 2’de'}</Badge>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {p.contentTypes.map((ct) => {

@@ -1,9 +1,11 @@
 import { apiRoute, ok, badRequest, notFound } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 import { audit } from '@/lib/security/audit';
 
 export const PATCH = apiRoute(
   async (request, { session, params }) => {
+    assertModuleEnabled('socialAccounts');
     const account = await prisma.socialAccount.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
     if (!account) return notFound('Hesap bulunamadı.');
     const body = await request.json().catch(() => ({}));

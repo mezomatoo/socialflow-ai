@@ -1,10 +1,12 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 import { retryPlatformContent } from '@/lib/social/publishingService';
 
 /** "Tekrar Dene" — yalnızca başarısız hedefler. */
 export const POST = apiRoute(
   async (request, { session, params }) => {
+    assertModuleEnabled('socialPublishing');
     const body = await request.json().catch(() => ({}));
     const ids: string[] = Array.isArray(body.platformContentIds) && body.platformContentIds.length
       ? body.platformContentIds.map(String)

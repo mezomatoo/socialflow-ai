@@ -1,8 +1,10 @@
 import { apiRoute, ok } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import { getMetricSummary, generateInsights } from '@/lib/services/analyticsService';
 
 /** Analizler — yalnızca gerçek API verisi; sahte metrik üretilmez. */
 export const GET = apiRoute(async (request, { session }) => {
+    assertModuleEnabled('analytics');
   const url = new URL(request.url);
   const days = Number(url.searchParams.get('days') ?? 30);
   const summary = await getMetricSummary(session.user.workspaceId, {

@@ -24,6 +24,7 @@ export type AppErrorCode =
   | 'PLATFORM_RULE_VIOLATION'
   | 'PROVIDER_UNAVAILABLE'
   | 'QUEUE_ERROR'
+  | 'MODULE_NOT_ENABLED'
   | 'INTERNAL_ERROR';
 
 export class AppError extends Error {

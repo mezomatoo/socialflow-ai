@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
 import { PLATFORM_LIST } from '@/lib/platforms/platforms';
+import { isModuleEnabled } from '@/lib/phase/phaseGates';
+import { PhaseGateNotice } from '@/components/ui/PhaseNotice';
 import { AccountsView } from './AccountsView';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +12,10 @@ export const metadata = { title: 'Sosyal Medya Hesapları' };
 export default async function AccountsPage() {
   const session = await getSession();
   if (!session) redirect('/giris');
+  // Faz kapısı (§3): modül kapalıysa çalışıyormuş gibi gösterilmez.
+  if (!isModuleEnabled('socialAccounts')) {
+    return <PhaseGateNotice module="socialAccounts" phase1Alternatives={[{ href: '/app/markalar', label: 'Markalar' }]} />;
+  }
   const ws = session.user.workspaceId;
 
   const [accounts, brands] = await Promise.all([

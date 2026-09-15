@@ -1,8 +1,10 @@
 import { apiRoute, ok } from '@/lib/api';
+import { assertModuleEnabled } from '@/lib/phase/phaseGates';
 import prisma from '@/lib/prisma';
 
 /** Uygulamanın kendi gerçek yayın verisi (sahte metrik üretmez). */
 export const GET = apiRoute(async (request, { session }) => {
+    assertModuleEnabled('analytics');
   const url = new URL(request.url);
   const days = Math.min(180, Number(url.searchParams.get('days') ?? 30));
   const from = new Date(Date.now() - days * 24 * 3600_000);
