@@ -179,7 +179,9 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
       title: 'Demo Beauty — Sonbahar Bakım Seti',
       masterCaption: MASTER_CAPTION,
       linkUrl: 'https://demo-beauty.example/kampanya',
-      defaultStyle: 'PROFESSIONAL'
+      defaultStyle: 'PROFESSIONAL',
+      // §99: yüklenen product.jpg içeriğe bağlanır (Hikaye gibi türler medya ister).
+      mediaIds: [mediaId]
     });
     contentId = content.id;
 
@@ -294,6 +296,11 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
     const report = await runPreflight(contentId, workspaceId);
     assert.ok(report);
     assert.equal(typeof report!.blocking, 'boolean');
+    // Faz 1'de yayınlama kapalıdır: içerik platform kurallarına uygun olmalı ve
+    // hesap bağlama eksikliği ENGELLEYİCİ olmamalıdır (§3 dürüstlük).
+    assert.equal(report!.phase1Mode, true);
+    assert.equal(report!.contentReadyCount, report!.totalCount, 'tüm hedefler içerik olarak uygun olmalı');
+    assert.equal(report!.blocking, false, 'Faz 1 içerik kontrolü engellememeli');
     assert.ok(report!.totalCount >= 5);
     assert.ok(Array.isArray(report!.targets));
     assert.equal(report!.targets.length, report!.totalCount);
@@ -307,7 +314,7 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
       }
       for (const check of item.checks ?? []) {
         assert.ok(String(check.message ?? '').length > 0, 'kontrol satırı mesaj taşımalı');
-        assert.ok(['OK', 'WARNING', 'ERROR'].includes(check.level));
+        assert.ok(['OK', 'INFO', 'WARNING', 'ERROR'].includes(check.level));
       }
     }
   });

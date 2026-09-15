@@ -109,15 +109,20 @@ interface PlatformDef {
 interface PreflightTarget {
   platformContentId: string;
   ready: boolean;
-  checks: { code: string; level: 'OK' | 'WARNING' | 'ERROR'; message: string }[];
+  checks: { code: string; level: 'OK' | 'INFO' | 'WARNING' | 'ERROR'; message: string }[];
   charUsed: number;
   charLimit: number;
 }
 interface Preflight {
   readyCount: number;
+  /** İçerik (platform kuralları) açısından hazır hedef sayısı — Faz 1 ölçütü. */
+  contentReadyCount?: number;
   totalCount: number;
   headline: string;
   blocking: boolean;
+  /** Faz 2'de yayın için bekleyen hedef sayısı (ör. hesap bağlama). */
+  publishingPending?: number;
+  phase1Mode?: boolean;
   targets: PreflightTarget[];
 }
 
@@ -417,7 +422,11 @@ export function ComposerView({
   }
 
   const failedCount = targets.filter((t) => t.status === 'FAILED').length;
-  const readyCount = preflight?.readyCount ?? targets.filter((t) => included[t.id]).length;
+  const readyCount = preflight
+    ? preflight.phase1Mode
+      ? preflight.contentReadyCount ?? preflight.readyCount
+      : preflight.readyCount
+    : targets.filter((t) => included[t.id]).length;
   const masterDirty = adaptedMaster !== null && content.masterCaption !== adaptedMaster && targets.some((t) => (t.caption ?? '').length > 0);
 
   return (
@@ -510,8 +519,19 @@ export function ComposerView({
       {preflight && (
         <div className={`mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${preflight.blocking ? 'border-danger/30 bg-danger/10' : 'border-success/30 bg-success/10'}`}>
           <Icon name={preflight.blocking ? 'alert-triangle' : 'check-circle'} size={18} className={preflight.blocking ? 'text-danger' : 'text-success'} />
-          <p className="flex-1 text-[13px] font-medium text-ink">{preflight.headline}</p>
-          <span className="hint">{preflight.readyCount}/{preflight.totalCount} hedef yayına hazır</span>
+          <p className="flex-1 text-[13px] font-medium text-ink">
+            {preflight.headline}
+            {preflight.phase1Mode && (preflight.publishingPending ?? 0) > 0 && (
+              <span className="ml-1 text-ink-muted">
+                · Yayın koşulları ({preflight.publishingPending}) Faz 2’de etkinleşecek.
+              </span>
+            )}
+          </p>
+          <span className="hint">
+            {preflight.phase1Mode
+              ? `${preflight.contentReadyCount ?? preflight.readyCount}/${preflight.totalCount} hedef kurala uygun`
+              : `${preflight.readyCount}/${preflight.totalCount} hedef yayına hazır`}
+          </span>
         </div>
       )}
 
@@ -638,7 +658,13 @@ export function ComposerView({
         <div className="sticky bottom-0 mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
           <span className="text-[13px] font-medium text-ink">
             {Object.values(included).filter(Boolean).length} hedef seçildi
-            {preflight && <span className="text-ink-faint"> · {preflight.readyCount} yayına hazır</span>}
+            {preflight && (
+              <span className="text-ink-faint">
+                {' '}
+                · {preflight.phase1Mode ? preflight.contentReadyCount ?? preflight.readyCount : preflight.readyCount}{' '}
+                {preflight.phase1Mode ? 'hedef kurala uygun' : 'yayına hazır'}
+              </span>
+            )}
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button className="btn-secondary btn-md" onClick={validate} disabled={validating}>
@@ -758,6 +784,8 @@ function TargetCard({
   const ratio = t.aspectRatio ?? t.rule?.recommendedAspectRatio ?? '1:1';
   const errors = preflightTarget?.checks.filter((c) => c.level === 'ERROR') ?? [];
   const warnings = preflightTarget?.checks.filter((c) => c.level === 'WARNING') ?? [];
+  // INFO satırları: ilgili modül bir sonraki fazda açılacağı için bilgilendirir.
+  const infos = preflightTarget?.checks.filter((c) => c.level === 'INFO') ?? [];
 
   return (
     <section className={`card overflow-hidden ${included ? '' : 'opacity-70'}`}>
@@ -865,11 +893,16 @@ function TargetCard({
           )}
 
           {/* Ön kontrol satırları */}
-          {(errors.length > 0 || warnings.length > 0) && (
+          {(errors.length > 0 || warnings.length > 0 || infos.length > 0) && (
             <div className="mt-2">
               <button className="btn-ghost btn-sm" onClick={() => setShowChecks((s) => !s)}>
-                <Icon name={errors.length ? 'alert-triangle' : 'info'} size={13} className={errors.length ? 'text-danger' : 'text-warning'} />
-                {errors.length} hata, {warnings.length} uyarı
+                <Icon
+                  name={errors.length ? 'alert-triangle' : 'info'}
+                  size={13}
+                  className={errors.length ? 'text-danger' : warnings.length ? 'text-warning' : 'text-info'}
+                />
+                {errors.length > 0 && <>{errors.length} hata, </>}
+                {warnings.length} uyarı{infos.length > 0 && <>, {infos.length} bilgi</>}
                 <Icon name={showChecks ? 'chevronDown' : 'chevronRight'} size={13} />
               </button>
               {showChecks && (
