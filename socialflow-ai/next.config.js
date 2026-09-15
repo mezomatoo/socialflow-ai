@@ -1,7 +1,14 @@
 /** @type {import('next').NextConfig} */
 const isProd = process.env.APP_ENV === 'production';
 
+// Geliştirme ve üretim derlemesi AYNI `.next` klasörünü paylaştığında, üretim
+// derlemesi çalışan dev sunucusunun parçalarını geçersiz kılar ve önizleme
+// `Cannot find module './NNNN.js'` ile 500 döner. Bu yüzden üretim çıktısı
+// ayrı bir klasöre yazılır; `next start` de aynı klasörü okur.
+const distDir = process.env.NEXT_DIST_DIR || (process.env.NODE_ENV === 'production' ? '.next-build' : '.next');
+
 const nextConfig = {
+  distDir,
   reactStrictMode: true,
   poweredByHeader: false,
   images: { unoptimized: true },
