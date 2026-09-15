@@ -4,10 +4,11 @@
 # Çalıştırma:  bash scripts/e2e-phase1.sh            (dev sunucu 3000'de olmalı)
 #              BASE=http://localhost:3000 bash scripts/e2e-phase1.sh
 #
-# Kapsam: kayıt → marka ("Demo Beauty") → product.jpg yükleme → tek ana metin
-#         (%20 / 20 Eylül 2026) → 5 hedef (IG Feed, IG Story, FB Post, LI Post, X Post)
-#         → "Platformlara Uyarla" → bilgi korunumu → medya varyantı → ön kontrol
-#         → LinkedIn'de bağımsız düzenleme → Taslaklar → yayın 501 → modül kapıları.
+# Kapsam (Faz 2): kayıt → marka ("Demo Beauty") → product.jpg yükleme → tek ana
+#         metin (%20 / 20 Eylül 2026) → 5 hedef (IG Feed, IG Story, FB Post, LI
+#         Post, X Post) → "Platformlara Uyarla" → bilgi korunumu → medya varyantı
+#         → demo hesap bağlama → ön kontrol 5/5 → LinkedIn'de bağımsız düzenleme
+#         → Taslaklar → GERÇEK YAYIN (demo sağlayıcı; 5/5 PUBLISHED) → kapılar.
 set -e
 
 BASE=${BASE:-http://localhost:3000}
@@ -116,7 +117,44 @@ for v in variants:
 print('  ✓ varyant orijinali referans alıyor, orijinal dosya değişmedi')
 PY
 
-step "7) ÖN KONTROL (Faz 1)"
+step "6b) SOSYAL HESAP BAĞLAMA (demo) + hedeflere atama"
+for PAIR in "INSTAGRAM demo.beauty" "FACEBOOK Demo Beauty" "LINKEDIN demo-beauty" "X demobeauty"; do
+  PLAT=${PAIR%% *}
+  HANDLE=${PAIR#* }
+  curl -s -b "$JAR" -X POST "$API/accounts" -H 'content-type: application/json' -H "x-csrf-token: $CSRF" \
+    -d "{\"platform\":\"$PLAT\",\"handle\":\"$HANDLE\",\"demoAccount\":true}" | python3 -c "
+import json,sys
+r=json.load(sys.stdin)
+assert r.get('ok'), r
+d=r['data']
+assert d['demoAccount'] is True and d['connectionStatus']=='ACTIVE', d
+print('  ✓', '$PLAT', '@'+d['handle'], '(demo, ACTIVE)')
+"
+done
+# Hesapları içerik hedeflerine ata (INSTAGRAM hesabı FEED+STORY'yi karşılar).
+curl -s -b "$JAR" "$API/accounts" -H "x-csrf-token: $CSRF" > /tmp/sf-e2e-accounts.json
+E2E_JAR="$JAR" E2E_CSRF="$CSRF" E2E_API="$API" E2E_CONTENT="$CONTENT" E2E_ACCOUNTS="$(cat /tmp/sf-e2e-accounts.json)" \
+  python3 - "$ADAPT" <<'PY'
+import json, subprocess, sys, os
+d = json.load(open(sys.argv[1]))['data']
+jar, csrf, base = os.environ['E2E_JAR'], os.environ['E2E_CSRF'], os.environ['E2E_API']
+accs = json.loads(os.environ['E2E_ACCOUNTS'])['data']['items']
+by_plat = {a['platform']: a['id'] for a in accs}
+targets = [(r['platformContentId'], r['platform']) for r in d['results']]
+for pc_id, plat in targets:
+    acc = by_plat.get(plat)
+    assert acc, plat + ' hesabi yok'
+    r = subprocess.run(['curl', '-s', '-b', jar, '-X', 'PATCH',
+        f'{base}/contents/{os.environ["E2E_CONTENT"]}',
+        '-H', 'content-type: application/json', '-H', f'x-csrf-token: {csrf}',
+        '-d', json.dumps({'accountAssignments': [{'platformContentId': pc_id, 'accountId': acc}]})],
+        capture_output=True, text=True)
+    out = json.loads(r.stdout)
+    assert out.get('ok'), (plat, out)
+print('  ✓ 5 hedefe hesap atandı')
+PY
+
+step "7) ÖN KONTROL (hesaplar bağlandı)"
 curl -s -b "$JAR" "$API/contents/$CONTENT/validate" -H "x-csrf-token: $CSRF" > /tmp/sf-e2e-validate.json
 python3 - <<'PY'
 import json
@@ -128,7 +166,7 @@ story = [t for t in d['targets'] if t['contentType'] == 'STORY'][0]
 codes = {c['code']: c['level'] for c in story['checks']}
 assert codes.get('VARIANT_OK') == 'OK', codes
 assert 'VARIANT_MISSING' not in codes, codes
-print('  ✓ STORY hedefi: varyant üretildi (VARIANT_OK); hesap bağlama Faz 2 bilgisi (INFO)')
+print('  ✓ STORY hedefi: varyant üretildi (VARIANT_OK); hesap ataması ile hesap bilgisi (INFO)')
 PY
 
 step "8) BAĞIMSIZ DÜZENLEME (LinkedIn) + diğerlerinin korunumu"
@@ -198,14 +236,25 @@ assert len(d['platformContents']) == 5
 assert len(d['versions']) >= 1
 "
 
-step "11) YAYINLAMA AÇIK MI? (Faz 2 — preflight yanıt vermeli)"
+step "11) GERÇEK YAYIN (demo sağlayıcı — 5/5 PUBLISHED)"
 curl -s -b "$JAR" -X POST "$API/contents/$CONTENT/publish" -H 'content-type: application/json' -H "x-csrf-token: $CSRF" -d '{}' | python3 -c "
 import json,sys
 r=json.load(sys.stdin)
-# Ya 'ok' ya da doğrulama hatası (BAD_REQUEST) beklenir; MODULE_NOT_ENABLED artık beklenmez.
-code=r.get('error',{}).get('code','OK') if not r.get('ok') else 'OK'
-print('  publish yanıtı:', code)
-assert code != 'MODULE_NOT_ENABLED', r
+assert r.get('ok'), r
+d=r['data']
+print('  hazır=', d['ready'], '/', d['total'], '| içerik durumu=', d['contentStatus'])
+assert d['total'] == 5 and d['ready'] == 5, d
+assert d['contentStatus'] == 'PUBLISHED', d
+for res in d['results']:
+    assert res['ok'] is True and res['status'] == 'PUBLISHED', res
+print('  ✓ 5 hedef de yayınlandı (demo modu); hiçbir hedef atlanmadı')
+"
+curl -s -b "$JAR" "$API/contents/$CONTENT" -H "x-csrf-token: $CSRF" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']
+print('  içerik durumu=', d['status'], '| hedef durumları=', sorted({p['status'] for p in d['platformContents']}))
+assert d['status'] == 'PUBLISHED', d['status']
+assert all(p['status']=='PUBLISHED' for p in d['platformContents'])
 "
 
 step "12) MODÜL KAPI DURUMLARI (Faz 2)"
@@ -235,5 +284,5 @@ probe_gate GET analytics/daily
 
 rm -f "$JAR" "$ADAPT" "$MEDIA_JSON" "$VARIANT_JSON" "$GATE_JSON" /tmp/sf-e2e-story.jpg /tmp/sf-e2e-validate.json /tmp/sf-e2e-over.json
 printf '\n'
-if [ "$FAIL" = "0" ]; then echo "SONUÇ: Faz 1 kabul senaryosu BAŞARILI ✓"; else echo "SONUÇ: BAŞARISIZ ✗"; fi
+if [ "$FAIL" = "0" ]; then echo "SONUÇ: Faz 2 kabul senaryosu BAŞARILI ✓"; else echo "SONUÇ: BAŞARISIZ ✗"; fi
 exit "$FAIL"
