@@ -102,6 +102,8 @@ model Workspace {
   integrationState ProviderIntegration[]
 
   @@index([slug])
+  adAccounts AdAccount[]
+
 }
 
 // Uygulama markası (ad, logo, renkler) — Admin Ayarları'ndan düzenlenebilir.
@@ -164,6 +166,8 @@ model Brand {
   @@index([workspaceId])
   conversations SocialConversation[]
   @@unique([workspaceId, id])
+
+  adAccounts AdAccount[]
 
 }
 
@@ -1297,4 +1301,65 @@ model InboxEvent {
   account SocialAccount @relation(fields: [workspaceId, socialAccountId], references: [workspaceId, id], onDelete: Restrict)
   @@unique([workspaceId, eventKey])
   @@index([workspaceId, status])
+}
+
+
+// PHASE 6 — Paid account isolation. Never reuse/overwrite SocialProviderToken.
+model AdAccount {
+  id                  String @id @default(cuid())
+  workspaceId         String
+  brandId             String?
+  provider            String
+  providerAccountId   String
+  displayName         String
+  currency            String?
+  timezone            String?
+  providerTimezone    String?
+  connectionStatus    String @default("UNVERIFIED")
+  grantedScopes       String @default("[]")
+  version             Int @default(1)
+  lastValidatedAt     DateTime?
+  lastAccountSyncAt   DateTime?
+  lastCampaignSyncAt  DateTime?
+  lastMetricsSyncAt   DateTime?
+  lastConversionSyncAt DateTime?
+  lastCatalogSyncAt   DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  brand Brand? @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Restrict)
+  credential AdAccountCredential?
+  capabilitySnapshots AdProviderCapability[]
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider, connectionStatus])
+}
+
+// Tokens are encrypted with existing crypto helpers by a future verified OAuth flow only.
+model AdAccountCredential {
+  id              String @id @default(cuid())
+  workspaceId     String
+  adAccountId     String @unique
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  lastRotatedAt   DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([workspaceId, adAccountId])
+}
+
+// Append-only capability evidence; no mutation/public import endpoint in this stage.
+model AdProviderCapability {
+  id           String @id @default(cuid())
+  workspaceId  String
+  adAccountId  String
+  version      Int
+  apiVersion   String?
+  capabilities String @default("{}")
+  source       String @default("UNVERIFIED")
+  verifiedAt   DateTime?
+  createdAt    DateTime @default(now())
+  account AdAccount @relation(fields: [workspaceId, adAccountId], references: [workspaceId, id], onDelete: Restrict)
+  @@unique([adAccountId, version])
+  @@index([workspaceId, adAccountId, createdAt])
 }
