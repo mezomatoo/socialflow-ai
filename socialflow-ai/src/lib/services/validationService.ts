@@ -272,7 +272,7 @@ export async function runPreflight(
           : `${contentReadyCount} / ${totalCount} hedef platform kurallarına uygun — ${totalCount - contentReadyCount} hedefte düzeltme gerekiyor`
         : readyCount === totalCount
           ? `${readyCount} / ${totalCount} platform yayına hazır`
-          : `${readyCount} / ${totalCount} platform yayına hazır — ${totalCount - readyCount} hedefte sorun var`;
+          : `${readyCount} / ${totalCount} platform yayına hazır — ${totalCount - readyCount} hedefte düzeltme gerekiyor`;
 
   return {
     contentId,
@@ -281,7 +281,7 @@ export async function runPreflight(
     contentReadyCount,
     totalCount,
     headline,
-    // Faz 1'de yayınlama kapalıdır; bu yüzden yalnızca içerik engelleri bloklar.
+    // Yayınlama modülü kapalıyken yalnızca içerik engelleri bloklar.
     blocking: phase1Mode
       ? contentBlocking
       : readyCount === 0 || targets.some((t) => t.checks.some((c) => c.level === 'ERROR')),

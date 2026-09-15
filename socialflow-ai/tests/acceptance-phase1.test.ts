@@ -293,11 +293,19 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
   });
 
   it('9) Yayın kontrolü uyarı ve hazırlık durumunu döner (§57)', async () => {
-    const report = await runPreflight(contentId, workspaceId);
+    // Yayınlama modülü kapalıyken: içerik platform kurallarına uygun olmalı ve
+    // hesap bağlama eksikliği ENGELLEYİCİ olmamalıdır (dürüst bozulma).
+    const prevFlag = process.env.FF_SOCIAL_PUBLISHING;
+    process.env.FF_SOCIAL_PUBLISHING = 'false';
+    let report;
+    try {
+      report = await runPreflight(contentId, workspaceId);
+    } finally {
+      if (prevFlag === undefined) delete process.env.FF_SOCIAL_PUBLISHING;
+      else process.env.FF_SOCIAL_PUBLISHING = prevFlag;
+    }
     assert.ok(report);
     assert.equal(typeof report!.blocking, 'boolean');
-    // Faz 1'de yayınlama kapalıdır: içerik platform kurallarına uygun olmalı ve
-    // hesap bağlama eksikliği ENGELLEYİCİ olmamalıdır (§3 dürüstlük).
     assert.equal(report!.phase1Mode, true);
     assert.equal(report!.contentReadyCount, report!.totalCount, 'tüm hedefler içerik olarak uygun olmalı');
     assert.equal(report!.blocking, false, 'Faz 1 içerik kontrolü engellememeli');
@@ -374,8 +382,15 @@ describe('§99 — Faz 1 kabul senaryosu (kayıt → marka → medya → uyarlam
       assert.equal(t.publishedAt, null);
     }
 
-    // Yayınlama modülü Faz 1'de kapalı olduğundan yayın ucu 501 döner.
+    // Yayınlama modülü bayrakla kapatıldığında yayın ucu 501 döner (sahte başarı yok).
     const { assertModuleEnabled } = await import('../src/lib/phase/phaseGates');
-    assert.throws(() => assertModuleEnabled('socialPublishing'));
+    const prev = process.env.FF_SOCIAL_PUBLISHING;
+    process.env.FF_SOCIAL_PUBLISHING = 'false';
+    try {
+      assert.throws(() => assertModuleEnabled('socialPublishing'));
+    } finally {
+      if (prev === undefined) delete process.env.FF_SOCIAL_PUBLISHING;
+      else process.env.FF_SOCIAL_PUBLISHING = prev;
+    }
   });
 });

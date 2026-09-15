@@ -1,16 +1,14 @@
 /**
- * Faz kapıları (§3, §5)
+ * Modül kapıları
  * ---------------------------------------------------------------------------
- * Uygulamada Faz 2–6 için yazılmış altyapı kodu bulunur (yayınlama, kuyruk,
- * analitik, bildirim, OAuth bağlantıları, otomasyon). Faz 1 KURALI: bu modüller
- * çalışıyormuş gibi SUNULMAZ. Kaldırmak yerine MERKEZİ TEK KAPI üzerinden
- * kapatılırlar; böylece:
- *   - arayüzde "çalışıyor" izlenimi veren sahte başarı yoktur,
- *   - kod korunur ve ilgili faz açıldığında tek bayrakla devreye girer,
- *   - kapı kararı kullanıcı arayüzünde değil tek doğruluk kaynağında verilir.
+ * Tamamlanmış ve test edilmiş modüller (yayınlama, zamanlama, hesap bağlama,
+ * analitik, bildirimler, AI asistanı) varsayılan olarak AÇIK gelir.
+ * Henüz uçtan uca çalışmayan modüller (ör. otomasyon motoru, kreatif stüdyo
+ * üretim zinciri) sahte çalışma izlenimi vermemesi için KAPALI gelir; kod
+ * korunur, hazır olduğunda tek bayrakla devreye alınır. Kapı kararı kullanıcı
+ * arayüzünde değil TEK doğruluk kaynağında verilir.
  *
- * Bayrak: `FF_<MODÜL>` (true/1) ile geçersiz kılınabilir. Varsayılanlar Faz 1
- * için bilinçli olarak KAPALI seçilmiştir.
+ * Bayrak: `FF_<MODÜL>` ("true"/"1" veya "false"/"0") ile geçersiz kılınabilir.
  */
 import { AppError } from '../errors';
 
@@ -35,8 +33,8 @@ export interface ModuleGate {
   /** Modülün ait olduğu faz. */
   phase: 2 | 3 | 4 | 5 | 6;
   label: string;
-  /** Faz 1'de varsayılan olarak kapalı mı? */
-  enabledInPhase1: boolean;
+  /** Varsayılan olarak açık mı? (env override ile değiştirilebilir) */
+  defaultEnabled: boolean;
   /** Kullanıcıya gösterilecek dürüst bilgilendirme. */
   notice: string;
 }
@@ -46,100 +44,100 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     id: 'socialPublishing',
     phase: 2,
     label: 'Sosyal Medyada Yayınlama',
-    enabledInPhase1: false,
-    notice: 'Gerçek sosyal medya yayını Faz 2’de etkinleşecek. İçeriklerinizi şimdi hazırlayıp taslak olarak saklayabilirsiniz.'
+    defaultEnabled: true,
+    notice: 'Yayın modülü bu kurulumda kapalı. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'
   },
   scheduling: {
     id: 'scheduling',
     phase: 3,
     label: 'Zamanlama ve Otomatik Yayın',
-    enabledInPhase1: false,
-    notice: 'Zamanlanmış otomatik yayın Faz 3’te etkinleşecek. Faz 1’de içerikler taslak/hazır durumunda saklanır.'
+    defaultEnabled: true,
+    notice: 'Zamanlanmış otomatik yayın bu kurulumda kapalı. İçerikler taslak/hazır durumunda saklanır.'
   },
   socialAccounts: {
     id: 'socialAccounts',
     phase: 2,
     label: 'Hesap Bağlama (OAuth)',
-    enabledInPhase1: false,
-    notice: 'Sosyal hesap bağlama Faz 2’de etkinleşecek. Şimdilik hedefleri hesap seçmeden de hazırlayabilirsiniz.'
+    defaultEnabled: true,
+    notice: 'Sosyal hesap bağlama bu kurulumda kapalı. Hedefleri hesap seçmeden de hazırlayabilirsiniz.'
   },
   analytics: {
     id: 'analytics',
     phase: 4,
     label: 'Analitik ve Raporlama',
-    enabledInPhase1: false,
-    notice: 'Analitik Faz 4’te etkinleşecek; gerçek yayın verisi olmadan gösterilecek metrik yoktur.'
+    defaultEnabled: true,
+    notice: 'Analitik bu kurulumda kapalı; gerçek yayın verisi olmadan gösterilecek metrik yoktur.'
   },
   notifications: {
     id: 'notifications',
     phase: 3,
     label: 'Bildirimler',
-    enabledInPhase1: false,
-    notice: 'Bildirim merkezi Faz 3’te etkinleşecek.'
+    defaultEnabled: true,
+    notice: 'Bildirim merkezi bu kurulumda kapalı.'
   },
   aiAssistant: {
     id: 'aiAssistant',
     phase: 2,
     label: 'AI İçerik Asistanı',
-    enabledInPhase1: false,
+    defaultEnabled: true,
     notice:
-      'Serbest metin üreten AI asistanı Faz 2’de etkinleşecek. Faz 1’de AI, kompozisyondaki “Platformlara Uyarla” adımında metninizi platform kurallarına göre yeniden yazar.'
+      'Serbest metin üreten AI asistanı bu kurulumda kapalı. AI; kompozisyondaki “Platformlara Uyarla” adımında metninizi platform kurallarına göre yeniden yazar.'
   },
   creativeStudio: {
     id: 'creativeStudio',
     phase: 4,
     label: 'Kreatif Stüdyo',
-    enabledInPhase1: false,
-    notice: 'Gelişmiş kreatif üretimi Faz 4’te etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Gelişmiş kreatif üretimi bu kurulumda henüz etkin değil.'
   },
   automation: {
     id: 'automation',
     phase: 5,
     label: 'Otomasyon Motoru',
-    enabledInPhase1: false,
-    notice: 'Otomasyon Faz 5’te etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Otomasyon motoru bu kurulumda henüz etkin değil.'
   },
   inbox: {
     id: 'inbox',
     phase: 5,
     label: 'Gelen Kutusu',
-    enabledInPhase1: false,
-    notice: 'Birleşik gelen kutusu Faz 5’te etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Birleşik gelen kutusu bu kurulumda kapalı.'
   },
   listening: {
     id: 'listening',
     phase: 5,
     label: 'Sosyal Dinleme',
-    enabledInPhase1: false,
-    notice: 'Sosyal dinleme Faz 5’te etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Sosyal dinleme bu kurulumda kapalı.'
   },
   crm: {
     id: 'crm',
     phase: 6,
     label: 'CRM',
-    enabledInPhase1: false,
-    notice: 'CRM Faz 6’da etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'CRM bu kurulumda kapalı.'
   },
   ads: {
     id: 'ads',
     phase: 6,
     label: 'Reklam Yönetimi',
-    enabledInPhase1: false,
-    notice: 'Reklam yönetimi Faz 6’da etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Reklam yönetimi bu kurulumda kapalı.'
   },
   commerce: {
     id: 'commerce',
     phase: 6,
     label: 'Ticaret Entegrasyonları',
-    enabledInPhase1: false,
-    notice: 'Ticaret entegrasyonları Faz 6’da etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Ticaret entegrasyonları bu kurulumda kapalı.'
   },
   attribution: {
     id: 'attribution',
     phase: 6,
     label: 'Atıf Analizi',
-    enabledInPhase1: false,
-    notice: 'Atıf analizi Faz 6’da etkinleşecek.'
+    defaultEnabled: false,
+    notice: 'Atıf analizi bu kurulumda kapalı.'
   }
 };
 
@@ -147,11 +145,11 @@ function envKey(id: ModuleId): string {
   return 'FF_' + id.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
 }
 
-/** Modül açık mı? (env override > faz varsayılanı) */
+/** Modül açık mı? (env override > varsayılan) */
 export function isModuleEnabled(id: ModuleId): boolean {
   const raw = process.env[envKey(id)];
   if (raw !== undefined && raw !== '') return raw === 'true' || raw === '1';
-  return MODULE_GATES[id].enabledInPhase1;
+  return MODULE_GATES[id].defaultEnabled;
 }
 
 export function moduleNotice(id: ModuleId): string {

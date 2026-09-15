@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth/session';
 import { listBrandKitsForWorkspace } from '@/lib/brandkit/service';
-import { isModuleEnabled } from '@/lib/phase/phaseGates';
+import { isFeatureEnabled } from '@/lib/brandkit/featureFlags';
 import { PhaseGateNotice } from '@/components/ui/PhaseNotice';
 import { BrandKitHub } from './BrandKitHub';
 
@@ -12,7 +12,7 @@ export default async function BrandKitHubPage() {
   const session = await getSession();
   if (!session) redirect('/giris');
   // Faz kapısı (§3): modül kapalıysa çalışıyormuş gibi gösterilmez.
-  if (!isModuleEnabled('creativeStudio')) {
+  if (!isFeatureEnabled('brandKitAdvanced')) {
     return <PhaseGateNotice module="creativeStudio" phase1Alternatives={[{ href: '/app/markalar', label: 'Markalar' }]} />;
   }
 
