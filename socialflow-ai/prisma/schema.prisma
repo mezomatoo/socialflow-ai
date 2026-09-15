@@ -284,6 +284,38 @@ model ProviderIntegration {
   @@unique([workspaceId, platform])
 }
 
+// SocialFlow Platform Entegrasyon Yapılandırması (Sistem/Admin Seviyesi)
+model ProviderIntegrationConfig {
+  id                String    @id @default(cuid())
+  provider          String    // 'META' | 'GOOGLE' | 'LINKEDIN' | 'TIKTOK' | 'X' | 'PINTEREST' | 'SNAPCHAT' | 'THREADS'
+  environment       String    @default("DEVELOPMENT") // 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION'
+  clientId          String    @default("")
+  clientSecretEnc   String    @default("")
+  developerTokenEnc String?   // Google Ads vb.
+  apiVersion        String?
+  authorizationUrl  String?
+  tokenUrl          String?
+  redirectUri       String?
+  webhookUrl        String?
+  webhookSecretEnc  String?
+  requestedScopes   String    @default("[]") // JSON dizi
+  approvedScopes    String    @default("[]") // JSON dizi
+  appReviewStatus   String    @default("NOT_CONFIGURED") // 'NOT_CONFIGURED' | 'CONFIGURED' | 'REVIEW_REQUIRED' | 'PARTIALLY_APPROVED' | 'READY' | 'ERROR'
+  writeEnabled      Boolean   @default(false)
+  readEnabled       Boolean   @default(false)
+  analyticsEnabled  Boolean   @default(false)
+  adsEnabled        Boolean   @default(false)
+  configuredAt      DateTime?
+  lastVerifiedAt    DateTime?
+  status            String    @default("NOT_CONFIGURED") // 'NOT_CONFIGURED' | 'READY' | 'ERROR' | 'API_LIMITATION'
+  errorMessage      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([provider, environment])
+  @@index([provider])
+}
+
 // -----------------------------------------------------------------------------
 // Medya kütüphanesi
 // -----------------------------------------------------------------------------
@@ -851,6 +883,7 @@ model OAuthState {
   workspaceId  String?
   codeVerifier String? // PKCE
   redirect     String?
+  metadata     String? // Bağlantı modu (ORGANIC/ADS/ALL), brandId vb.
   consumedAt   DateTime?
   expiresAt    DateTime
   createdAt    DateTime  @default(now())

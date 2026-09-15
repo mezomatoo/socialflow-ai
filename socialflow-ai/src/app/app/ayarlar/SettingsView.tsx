@@ -276,7 +276,20 @@ function IntegrationsTab({ integrations, demoMode }: { integrations: Integration
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-brand/20 bg-brand-50/30 dark:bg-brand-950/20 p-4">
+        <div>
+          <h4 className="text-[14px] font-bold text-ink">Platform Entegrasyon & Geliştirici Ayarları</h4>
+          <p className="text-[12.5px] text-ink-muted">
+            Meta, Google, LinkedIn, TikTok, X, Pinterest ve Snapchat resmî OAuth anahtarlarını, şifrelenmiş sırları ve App Review durumlarını yönetin.
+          </p>
+        </div>
+        <a href="/app/admin/entegrasyonlar" className="btn-primary btn-sm inline-flex items-center gap-1.5 shrink-0">
+          <Icon name="sliders" size={14} />
+          Geliştirici Konsolu
+        </a>
+      </div>
+
       {demoMode && (
         <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
           <Icon name="alert-triangle" size={16} className="mt-0.5 text-warning" />

@@ -38,7 +38,14 @@ export async function processJob(job: any): Promise<Record<string, unknown> | vo
     case 'CheckSocialAccountHealthJob':
       return handleAccountHealthJob(job, payload);
     case 'TokenRefreshJob':
-      return handleTokenRefreshJob(job, payload);    case 'MediaProcessingJob':
+      return handleTokenRefreshJob(job, payload);
+    case 'SyncSocialAccountJob':
+      return handleSyncSocialAccountJob(job, payload);
+    case 'SyncAdvertisingAccountJob':
+      return handleSyncAdvertisingAccountJob(job, payload);
+    case 'SyncExistingPostsJob':
+      return handleSyncExistingPostsJob(job, payload);
+    case 'MediaProcessingJob':
       return handleMediaProcessingJob(job, payload);
     case 'AnalyticsSyncJob':
       return handleAnalyticsSyncJob(job, payload);
@@ -478,4 +485,71 @@ async function ensureDueSchedules() {
       workspaceId: null
     }).catch((err) => console.error('[queue] zamanlama kuyruğa alınamadı', err));
   }
+}
+
+async function handleSyncSocialAccountJob(_job: any, payload: any) {
+  const accountId: string = payload.accountId;
+  if (!accountId) throw new Error('accountId eksik.');
+
+  const account = await prisma.socialAccount.findUnique({
+    where: { id: accountId },
+    include: { token: true }
+  });
+
+  if (!account || !account.token) {
+    return { skipped: true, reason: 'Hesap veya token bulunamadı.' };
+  }
+
+  const provider = getProvider(account.platform, { forceReal: !account.demoAccount });
+  const token = fromCipherText(account.token.accessTokenEnc);
+  const profiles = await provider.fetchAccountProfiles(token);
+  const match = profiles.find((p) => p.externalId === account.externalId) || profiles[0];
+
+  if (match) {
+    await prisma.socialAccount.update({
+      where: { id: account.id },
+      data: {
+        displayName: match.displayName || account.displayName,
+        handle: match.handle || account.handle,
+        avatarUrl: match.avatarUrl || account.avatarUrl,
+        lastSyncedAt: new Date()
+      }
+    });
+  }
+
+  return { synced: true, accountId: account.id };
+}
+
+async function handleSyncAdvertisingAccountJob(_job: any, payload: any) {
+  const adAccountId: string = payload.adAccountId;
+  if (!adAccountId) throw new Error('adAccountId eksik.');
+
+  const adAccount = await prisma.adAccount.findUnique({
+    where: { id: adAccountId },
+    include: { credential: true }
+  });
+
+  if (!adAccount || !adAccount.credential) {
+    return { skipped: true, reason: 'Reklam hesabı veya kimlik bilgisi bulunamadı.' };
+  }
+
+  await prisma.adAccount.update({
+    where: { id: adAccount.id },
+    data: {
+      lastAccountSyncAt: new Date(),
+      lastValidatedAt: new Date()
+    }
+  });
+
+  return { synced: true, adAccountId: adAccount.id };
+}
+
+async function handleSyncExistingPostsJob(_job: any, payload: any) {
+  const accountId: string = payload.accountId;
+  if (!accountId) throw new Error('accountId eksik.');
+
+  const { fetchExistingOrganicPosts } = await import('../advertising/adEligibilityService');
+  const posts = await fetchExistingOrganicPosts(accountId, { limit: 25 });
+
+  return { synced: true, accountId, count: posts.length };
 }

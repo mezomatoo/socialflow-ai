@@ -1,9 +1,12 @@
 import prisma from '../prisma';
+import { NextResponse } from 'next/server';
 import type { SessionContext } from '../auth/session';
 import { isFeatureEnabled } from '../brandkit/featureFlags';
 import { AdvertisingError, AD_CAPABILITIES, unavailableMetric } from './contracts';
 import { advertisingRegistry } from './registry';
 import { canAdvertising, rejectFinancialWrite, type AdPermission } from './permissions';
+import { getDecryptedProviderConfig } from '../social/providerConfigService';
+import { createOAuthState, buildAuthorizationUrl } from '../social/oauth2';
 
 export async function authorizeAdvertising(session: SessionContext, permission: AdPermission = 'ads:view') {
   if (!isFeatureEnabled('paidMedia')) throw new AdvertisingError('FEATURE_DISABLED', 'Reklam modülü bu kurulumda kapalı.', 404);
@@ -108,11 +111,53 @@ export async function mapAdAccountBrand(session: SessionContext, id: string, inp
     return { id, version: record.version + 1 };
   });
 }
-export async function requestAdvertisingConnection(session: SessionContext, provider: string): Promise<never> {
+export async function requestAdvertisingConnection(session: SessionContext, provider: string): Promise<Response> {
   await authorizeAdvertising(session, 'ads:accounts_manage');
-  advertisingRegistry.get(provider);
+  const adapter = advertisingRegistry.get(provider);
   if (session.sessionId === 'preview-demo') throw new AdvertisingError('PREVIEW_ONLY', 'Demo önizleme oturumu gerçek reklam hesabına bağlanamaz.', 403);
-  throw new AdvertisingError('API_LIMITATION', 'API KISITLAMASI — Resmî reklam OAuth bağlantısı bu aşamada henüz etkin değil. Organik hesap bağlantısı reklam izni sayılmaz.', 422);
+
+  const config = await getDecryptedProviderConfig(provider);
+  if (!config.isConfigured || !config.adsEnabled) {
+    throw new AdvertisingError(
+      'API_LIMITATION',
+      `${adapter.info.name} reklam API kimlik bilgileri henüz yapılandırılmamış. Lütfen Yönetim → Entegrasyonlar bölümünden Client ID ve Secret tanımlayın.`,
+      422
+    );
+  }
+
+  const { state, codeVerifier } = await createOAuthState({
+    platform: config.provider,
+    userId: session.user.id,
+    workspaceId: session.user.workspaceId,
+    redirectUri: config.redirectUri,
+    redirect: '/app/reklamlar/hesaplar',
+    metadata: {
+      provider: config.provider,
+      mode: 'ADS'
+    }
+  });
+
+  const isPkce = config.provider === 'X' || config.provider === 'TIKTOK' || config.provider === 'PINTEREST';
+
+  const authorizeUrl = buildAuthorizationUrl(
+    {
+      authorizationUrl: config.authorizationUrl,
+      tokenUrl: config.tokenUrl,
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      scopes: config.requestedScopes.filter(s => s.toLowerCase().includes('ads') || s.toLowerCase().includes('adwords') || s.toLowerCase().includes('manage') || s.toLowerCase().includes('business') || s.toLowerCase().includes('read')),
+      scopeSeparator: config.provider === 'META' ? ',' : ' ',
+      pkce: isPkce,
+      extraAuthParams: config.provider === 'GOOGLE' ? { access_type: 'offline', prompt: 'consent' } : {}
+    },
+    {
+      state,
+      redirectUri: config.redirectUri,
+      codeVerifier: isPkce ? codeVerifier : undefined
+    }
+  );
+
+  return NextResponse.json({ ok: true, data: { authorizeUrl, state } });
 }
 export async function requestFinancialOperation(session: SessionContext): Promise<never> {
   await authorizeAdvertising(session, 'ads:view');

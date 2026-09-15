@@ -239,3 +239,6 @@ export async function checkAllAccountHealth(workspaceId?: string): Promise<{ che
   }
   return { checked: accounts.length, failed };
 }
+
+export const checkSocialAccountHealth = checkAccountHealth;
+

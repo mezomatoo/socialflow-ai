@@ -46,6 +46,7 @@ export async function createOAuthState(params: {
   socialAccountId?: string;
   redirectUri?: string;
   accountUpdatedAt?: Date;
+  metadata?: Record<string, unknown>;
 }) {
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
@@ -62,6 +63,7 @@ export async function createOAuthState(params: {
       workspaceId: params.workspaceId ?? null,
       codeVerifier,
       redirect: params.redirect ?? null,
+      metadata: params.metadata ? JSON.stringify(params.metadata) : null,
       expiresAt
     }
   });

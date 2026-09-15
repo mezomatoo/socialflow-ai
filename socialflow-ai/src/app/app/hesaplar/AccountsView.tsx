@@ -1,15 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
-import { Badge, EmptyState, Modal } from '@/components/ui';
+import { Badge, EmptyState, Modal, Spinner } from '@/components/ui';
 import { useToast } from '@/components/ui/Toaster';
 import { api, ApiError } from '@/lib/client/api';
 import { formatRelative } from '@/lib/format';
 import { PLATFORM_META, type PlatformCode } from '@/lib/platforms/platforms';
+import type { DiscoveredAssetSummary } from '@/lib/social/assetDiscoveryService';
 
-interface AccountItem {
+interface SocialAccountItem {
   id: string;
   platform: string;
   handle: string;
@@ -27,413 +28,818 @@ interface AccountItem {
   lastSyncedAt: string | null;
 }
 
-const STATUS: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
-  ACTIVE: { tone: 'success', label: 'Bağlı' },
+interface AdAccountItem {
+  id: string;
+  provider: string;
+  providerAccountId: string;
+  displayName: string;
+  currency: string | null;
+  timezone: string | null;
+  connectionStatus: string;
+  brandId: string | null;
+  brandName: string | null;
+  brandColor: string | null;
+  tokenExpiresAt: string | null;
+  lastValidatedAt: string | null;
+}
+
+interface ProviderStatus {
+  code: string;
+  name: string;
+  isConfigured: boolean;
+  appReviewStatus: string;
+  writeEnabled: boolean;
+  adsEnabled: boolean;
+  status: string;
+}
+
+interface BrandOption {
+  id: string;
+  name: string;
+  primaryColor?: string | null;
+}
+
+const STATUS_MAP: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
+  ACTIVE: { tone: 'success', label: 'Bağlı (Aktif)' },
+  CONNECTED: { tone: 'success', label: 'Bağlı' },
   EXPIRED: { tone: 'warning', label: 'Süresi Doldu' },
   REVOKED: { tone: 'danger', label: 'Bağlantı Kesildi' },
   ERROR: { tone: 'danger', label: 'Hata' },
-  NEEDS_REAUTH: { tone: 'warning', label: 'Yetkilendirme Gerekli' }
+  NEEDS_REAUTH: { tone: 'warning', label: 'Yetkilendirme Gerekli' },
+  UNVERIFIED: { tone: 'neutral', label: 'Doğrulanmadı' }
 };
 
-const ACCOUNT_TYPES: Record<string, string> = {
-  PROFILE: 'Profil',
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  PROFILE: 'Kişisel Profil',
   PAGE: 'Sayfa',
-  BUSINESS: 'İşletme',
+  BUSINESS: 'İşletme Hesabı',
+  CHANNEL: 'Kanal',
   GROUP: 'Grup'
 };
 
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  ORGANIC_PAGE: 'Sayfa (Facebook/LinkedIn)',
+  ORGANIC_PROFILE: 'Profil Hesabı',
+  INSTAGRAM_BUSINESS: 'Instagram İşletme',
+  YOUTUBE_CHANNEL: 'YouTube Kanalı',
+  AD_ACCOUNT: 'Reklam Hesabı',
+  PINTEREST_BOARD: 'Pinterest Panosu'
+};
+
 export function AccountsView({
-  items: initial,
+  socialAccounts: initialSocial,
+  adAccounts: initialAds,
   brands,
-  platforms,
-  demoMode,
-  connectionResult
+  providers,
+  discoverySessionKey,
+  connectionResult,
+  errorMessage,
+  demoMode
 }: {
-  items: AccountItem[];
-  brands: { id: string; name: string }[];
-  platforms: { code: string; name: string; color: string }[];
-  demoMode: boolean;
+  socialAccounts: SocialAccountItem[];
+  adAccounts: AdAccountItem[];
+  brands: BrandOption[];
+  providers: ProviderStatus[];
+  discoverySessionKey?: string | null;
   connectionResult?: string | null;
+  errorMessage?: string | null;
+  demoMode: boolean;
 }) {
   const toast = useToast();
-  const [items, setItems] = useState(initial);
-  const [addOpen, setAddOpen] = useState(false);
+  const [socials, setSocials] = useState<SocialAccountItem[]>(initialSocial);
+  const [ads, setAds] = useState<AdAccountItem[]>(initialAds);
+  const [activeTab, setActiveTab] = useState<'all' | 'social' | 'ads'>('all');
+
+  // Permission consent modal state
+  const [consentProvider, setConsentProvider] = useState<ProviderStatus | null>(null);
+  const [connectionMode, setConnectionMode] = useState<'ALL' | 'ORGANIC' | 'ADS'>('ALL');
+  const [startingOAuth, setStartingOAuth] = useState(false);
+
+  // Asset discovery modal state
+  const [discoveryKey, setDiscoveryKey] = useState<string | null>(discoverySessionKey ?? null);
+  const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAssetSummary[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [selectedBrandMap, setSelectedBrandMap] = useState<Record<string, string>>({});
+  const [importingAssetId, setImportingAssetId] = useState<string | null>(null);
+
+  // Disconnect confirmation modal state
+  const [disconnectingAccount, setDisconnectingAccount] = useState<{ id: string; name: string; type: 'social' | 'ad' } | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  // Busy indicator for health checks
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, AccountItem[]>();
-    for (const p of platforms) map.set(p.code, []);
-    for (const a of items) {
-      if (!map.has(a.platform)) map.set(a.platform, []);
-      map.get(a.platform)!.push(a);
+  // On mount: if discovery session key is present, load assets
+  useEffect(() => {
+    if (discoveryKey) {
+      loadDiscoveredAssets(discoveryKey);
     }
-    return Array.from(map.entries()).filter(([, list]) => list.length > 0);
-  }, [items, platforms]);
+  }, [discoveryKey]);
 
-  async function connect(a: AccountItem) {
-    setBusyId(a.id);
+  async function loadDiscoveredAssets(sessionKey: string) {
+    setLoadingAssets(true);
     try {
-      const res = await api.post<{ demo: boolean; authorizeUrl: string | null; message?: string }>(
-        `/api/accounts/${a.id}/connect`
+      const res = await api.get<{ provider: string; items: DiscoveredAssetSummary[] }>(
+        `/api/v1/accounts/oauth/discovered?session=${encodeURIComponent(sessionKey)}`
       );
-      if (res.demo) {
-        toast.info('Demo Modu bağlantısı', res.message ?? 'Hesap simülasyon olarak bağlı.');
-      } else if (res.authorizeUrl) {
-        toast.success('Yetkilendirme başlatılıyor', 'Resmî OAuth sayfasına yönlendiriliyorsunuz.');
-        window.location.href = res.authorizeUrl;
-        return;
+      setDiscoveredAssets(res.items);
+      // Pre-select first brand for all assets if available
+      if (brands.length > 0) {
+        const initialMap: Record<string, string> = {};
+        res.items.forEach(a => { initialMap[a.id] = brands[0].id; });
+        setSelectedBrandMap(initialMap);
       }
-    } catch (e) {
-      toast.error('Bağlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } catch (err: any) {
+      toast.error('Keşif Oturumu Yüklenemedi', err?.message || 'Keşfedilen hesaplar alınamadı.');
+      setDiscoveryKey(null);
+    } finally {
+      setLoadingAssets(false);
+    }
+  }
+
+  // Start OAuth Flow
+  async function startOAuthFlow() {
+    if (!consentProvider) return;
+    setStartingOAuth(true);
+    try {
+      const res = await api.post<{ provider: string; authorizeUrl: string; state: string }>(
+        '/api/v1/accounts/oauth/start',
+        {
+          provider: consentProvider.code,
+          mode: connectionMode
+        }
+      );
+
+      toast.info('Yönlendiriliyor', `${consentProvider.name} resmî giriş ekranına aktarılıyorsunuz…`);
+      window.location.href = res.authorizeUrl;
+    } catch (err: any) {
+      toast.error('Bağlantı Başlatılamadı', err?.message || 'OAuth yönlendirme hatası.');
+      setStartingOAuth(false);
+    }
+  }
+
+  // Import Selected Discovered Asset
+  async function handleImportAsset(asset: DiscoveredAssetSummary) {
+    if (!discoveryKey) return;
+    setImportingAssetId(asset.id);
+    const chosenBrandId = selectedBrandMap[asset.id] || null;
+
+    try {
+      const res = await api.post<any>('/api/v1/accounts/oauth/import', {
+        sessionKey: discoveryKey,
+        assetId: asset.id,
+        brandId: chosenBrandId
+      });
+
+      toast.success('Hesap Bağlandı', `${asset.name} başarıyla çalışma alanınıza eklendi.`);
+
+      // Mark already connected in modal
+      setDiscoveredAssets(prev => prev.map(a => a.id === asset.id ? { ...a, alreadyConnected: true } : a));
+
+      // Reload accounts from API
+      const accountsRes = await api.get<{ items: any[] }>('/api/v1/accounts');
+      setSocials(accountsRes.items);
+    } catch (err: any) {
+      toast.error('İçe Aktarılamadı', err?.message || 'Hesap eklenirken bir hata oluştu.');
+    } finally {
+      setImportingAssetId(null);
+    }
+  }
+
+  // Run Health Check on Social Account
+  async function handleHealthCheck(account: SocialAccountItem) {
+    setBusyId(account.id);
+    try {
+      const res = await api.post<{
+        ok: boolean;
+        connectionStatus: string;
+        checks: { label: string; level: 'OK' | 'WARNING' | 'ERROR'; message: string }[];
+      }>(`/api/v1/accounts/${account.id}/health`);
+
+      const errors = res.checks.filter(c => c.level === 'ERROR');
+      if (res.ok) {
+        toast.success('Bağlantı Sağlıklı', `${account.displayName} bağlantısı sorunsuz doğrulandı.`);
+      } else {
+        toast.warning('Bağlantı Uyarısı', errors[0]?.message || 'Bağlantıda sorun tespit edildi.');
+      }
+
+      setSocials(prev =>
+        prev.map(item =>
+          item.id === account.id
+            ? {
+                ...item,
+                connectionStatus: res.connectionStatus,
+                lastSyncedAt: new Date().toISOString(),
+                lastError: res.ok ? null : (errors[0]?.message || item.lastError)
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      toast.error('Sağlık Denetimi Başarısız', err?.message || 'Kontrol yapılamadı.');
     } finally {
       setBusyId(null);
     }
   }
 
-  async function runHealthCheck(a: AccountItem) {
-    setBusyId(a.id);
+  // Update Brand Mapping for Social Account
+  async function handleChangeBrand(accountId: string, brandId: string) {
+    setBusyId(accountId);
     try {
-      const res = await api.post<{ ok: boolean; connectionStatus: string; checks: { label: string; level: 'OK' | 'WARNING' | 'ERROR'; message: string }[] }>(
-        `/api/accounts/${a.id}/health`
-      );
-      const problems = res.checks.filter((c) => c.level === 'ERROR');
-      if (res.ok) {
-        toast.success('Bağlantı sağlıklı', problems.length ? problems[0].message : `${res.checks.length} kontrol tamamlandı, sorun bulunamadı.`);
-      } else {
-        toast.error('Bağlantı sorunu bulundu', problems[0]?.message ?? 'Bağlantı doğrulanamadı.');
-      }
-      setItems((prev) =>
-        prev.map((x) =>
-          x.id === a.id
-            ? {
-                ...x,
-                connectionStatus: res.connectionStatus,
-                lastSyncedAt: new Date().toISOString(),
-                lastError: res.ok ? null : problems[0]?.message ?? x.lastError
-              }
+      await api.patch(`/api/v1/accounts/${accountId}`, { brandId: brandId || null });
+      const brand = brands.find(b => b.id === brandId);
+      setSocials(prev =>
+        prev.map(x =>
+          x.id === accountId
+            ? { ...x, brandId: brandId || null, brandName: brand?.name ?? null, brandColor: brand?.primaryColor ?? null }
             : x
         )
       );
-    } catch (e) {
-      toast.error('Sağlık denetimi başarısız', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+      toast.success('Marka Güncellendi');
+    } catch (err: any) {
+      toast.error('Marka Güncellenemedi', err?.message || 'Hata oluştu.');
     } finally {
       setBusyId(null);
     }
   }
 
-  async function changeBrand(a: AccountItem, brandId: string) {
-    setBusyId(a.id);
+  // Disconnect Account
+  async function confirmDisconnect() {
+    if (!disconnectingAccount) return;
+    setDisconnecting(true);
     try {
-      await api.patch(`/api/accounts/${a.id}`, { brandId: brandId || null });
-      const brand = brands.find((b) => b.id === brandId);
-      setItems((prev) =>
-        prev.map((x) => (x.id === a.id ? { ...x, brandId: brandId || null, brandName: brand?.name ?? null } : x))
-      );
-      toast.success('Marka ataması güncellendi');
-    } catch (e) {
-      toast.error('Güncellenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+      if (disconnectingAccount.type === 'social') {
+        await api.del(`/api/v1/accounts/${disconnectingAccount.id}`);
+        setSocials(prev => prev.filter(x => x.id !== disconnectingAccount.id));
+      } else {
+        await api.del(`/api/v1/advertising/accounts/${disconnectingAccount.id}`);
+        setAds(prev => prev.filter(x => x.id !== disconnectingAccount.id));
+      }
+      toast.success('Bağlantı Kesildi', `${disconnectingAccount.name} bağlantısı güvenle kaldırıldı.`);
+      setDisconnectingAccount(null);
+    } catch (err: any) {
+      toast.error('Bağlantı Kesilemedi', err?.message || 'Hata oluştu.');
     } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function remove(a: AccountItem) {
-    if (!window.confirm(`${a.displayName} (@${a.handle}) bağlantısı kaldırılsın mı?`)) return;
-    setBusyId(a.id);
-    try {
-      await api.del(`/api/accounts/${a.id}`);
-      setItems((prev) => prev.filter((x) => x.id !== a.id));
-      toast.success('Hesap bağlantısı kaldırıldı');
-    } catch (e) {
-      toast.error('Kaldırılamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
-    } finally {
-      setBusyId(null);
+      setDisconnecting(false);
     }
   }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:py-8">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      {/* Page Header */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">Sosyal Medya Hesapları</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">
+              Hesap Bağlantı Merkezi
+            </h1>
+            <Badge tone="success">Canlı Üretim Geçidi</Badge>
+          </div>
           <p className="mt-1 text-[13.5px] text-ink-muted">
-            Resmî OAuth ile bağlanan hesaplar. Parola veya oturum bilgisi asla istenmez ve saklanmaz.
+            Resmî sağlayıcı OAuth 2.0 akışı ile güvenli hesap bağlantısı. Sosyal medya parolanız asla istenmez ve saklanmaz.
           </p>
         </div>
-        <button className="btn-primary btn-md" onClick={() => setAddOpen(true)}>
-          <Icon name="plus" size={16} /> Hesap Bağla
-        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg bg-surface-muted p-1 text-[12.5px] font-medium text-ink-muted">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`rounded-md px-3 py-1.5 transition-colors ${activeTab === 'all' ? 'bg-surface text-ink shadow-xs' : 'hover:text-ink'}`}
+            >
+              Tümü ({socials.length + ads.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('social')}
+              className={`rounded-md px-3 py-1.5 transition-colors ${activeTab === 'social' ? 'bg-surface text-ink shadow-xs' : 'hover:text-ink'}`}
+            >
+              Organik ({socials.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('ads')}
+              className={`rounded-md px-3 py-1.5 transition-colors ${activeTab === 'ads' ? 'bg-surface text-ink shadow-xs' : 'hover:text-ink'}`}
+            >
+              Reklamlar ({ads.length})
+            </button>
+          </div>
+        </div>
       </div>
 
-      {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
-
-      {demoMode && (
-        <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
-          <span className="mt-0.5 text-warning">
-            <Icon name="alert-triangle" size={16} />
-          </span>
-          <p>
-            <strong>Demo Modu etkin.</strong> Aşağıdaki hesaplar simülasyondur; gerçek sosyal medya paylaşımı yapılmaz.
-            Gerçek bağlantı için Ayarlar → Entegrasyonlar bölümünden resmî API kimlik bilgilerinizi tanımlayın.
-          </p>
+      {/* Connection Result Banners */}
+      {connectionResult === 'reddedildi' && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-[13px] text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <Icon name="alert-triangle" size={18} className="text-amber-600 shrink-0" />
+            <span>Sağlayıcı yetkilendirmesi iptal edildi veya reddedildi. {errorMessage}</span>
+          </div>
         </div>
       )}
 
-      {grouped.length === 0 ? (
-        <div className="card p-6">
-          <EmptyState
-            icon="users"
-            title="Bağlı hesap yok"
-            description="Yayınlama yapabilmek için en az bir sosyal medya hesabı bağlayın."
-            action={
-              <button className="btn-primary btn-md" onClick={() => setAddOpen(true)}>
-                <Icon name="plus" size={15} /> Hesap Bağla
-              </button>
-            }
-          />
+      {connectionResult === 'gecersiz_state' && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-[13px] text-rose-900 dark:text-rose-200">
+          <div className="flex items-center gap-2">
+            <Icon name="alert-triangle" size={18} className="text-rose-600 shrink-0" />
+            <span>Güvenlik doğrulaması zaman aşımına uğradı (CSRF State). Lütfen bağlantıyı tekrar başlatın.</span>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-5">
-          {grouped.map(([platform, list]) => (
-            <section key={platform}>
-              <div className="mb-2 flex items-center gap-2">
-                <PlatformIcon platform={platform} size={20} rounded="md" />
-                <h2 className="text-[14px] font-bold text-ink">{PLATFORM_META[platform as PlatformCode]?.name ?? platform}</h2>
-                <span className="hint">{list.length} hesap</span>
+      )}
+
+      {connectionResult === 'varlik_bulunamadi' && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-[13px] text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <Icon name="alert-triangle" size={18} className="text-amber-600 shrink-0" />
+            <span>Yetkilendirdiğiniz sağlayıcı hesabında bağlanabilecek uygun bir Sayfa, Kanal veya Reklam Hesabı bulunamadı. Lütfen sağlayıcı panelinde yönetici yetkinizi kontrol edin.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Provider Cards Carousel / Grid */}
+      <div className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[15px] font-bold text-ink">Resmî Entegrasyon Sağlayıcıları</h2>
+          <span className="text-[12px] text-ink-muted">Tek tıkla resmî giriş yapın</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          {providers.map((p) => {
+            const platformKey = p.code === 'META' ? 'INSTAGRAM' : p.code === 'GOOGLE' ? 'YOUTUBE' : p.code;
+            return (
+              <div
+                key={p.code}
+                className="card flex flex-col items-center justify-between p-3.5 text-center transition-all hover:border-brand/50 hover:shadow-xs"
+              >
+                <div className="flex flex-col items-center">
+                  <PlatformIcon platform={platformKey as any} size={36} rounded="lg" />
+                  <span className="mt-2 text-[12.5px] font-bold text-ink line-clamp-1">{p.name.split(' ')[0]}</span>
+                  <span className="mt-0.5 text-[10.5px] text-ink-muted">
+                    {p.isConfigured ? (
+                      <span className="text-emerald-600 font-medium">✓ Hazır</span>
+                    ) : (
+                      <span className="text-ink-faint">Yapılandırılmadı</span>
+                    )}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setConsentProvider(p)}
+                  disabled={!p.isConfigured}
+                  className={`btn-sm mt-3 w-full text-[11.5px] font-semibold ${
+                    p.isConfigured ? 'btn-primary' : 'btn-ghost opacity-40 cursor-not-allowed'
+                  }`}
+                >
+                  Bağla
+                </button>
               </div>
-              <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {list.map((a) => {
-                  const st = STATUS[a.connectionStatus] ?? { tone: 'neutral' as const, label: a.connectionStatus };
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Connected Accounts Section */}
+      <div className="space-y-6">
+        {/* Social Accounts */}
+        {(activeTab === 'all' || activeTab === 'social') && (
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-ink">
+                Bağlı Sosyal Medya Hesapları ({socials.length})
+              </h3>
+            </div>
+
+            {socials.length === 0 ? (
+              <div className="card p-6 text-center">
+                <p className="text-[13px] text-ink-muted">
+                  Henüz bağlı bir sosyal medya hesabınız bulunmuyor. Yukarıdaki sağlayıcılardan birini seçerek hemen bağlayabilirsiniz.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {socials.map((a) => {
+                  const statusInfo = STATUS_MAP[a.connectionStatus] || { label: a.connectionStatus, tone: 'neutral' };
                   return (
-                    <li key={a.id} className="card card-pad">
-                      <div className="flex items-start gap-3">
-                        <span className="relative">
-                          <PlatformIcon platform={a.platform} size={40} rounded="lg" />
-                          <span
-                            className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface"
-                            style={{
-                              background:
-                                st.tone === 'success'
-                                  ? 'var(--success)'
-                                  : st.tone === 'warning'
-                                    ? 'var(--warning)'
-                                    : st.tone === 'danger'
-                                      ? 'var(--danger)'
-                                      : '#94a3b8'
-                            }}
-                          />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-[14px] font-bold text-ink">{a.displayName}</p>
-                            {a.demoAccount && <Badge tone="warning">Demo</Badge>}
+                    <div key={a.id} className="card card-pad flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start gap-3">
+                          <div className="relative shrink-0">
+                            {a.avatarUrl ? (
+                              <img
+                                src={a.avatarUrl}
+                                alt={a.displayName}
+                                className="h-10 w-10 rounded-full object-cover border border-border"
+                              />
+                            ) : (
+                              <PlatformIcon platform={a.platform as any} size={40} rounded="full" />
+                            )}
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface ${
+                                statusInfo.tone === 'success'
+                                  ? 'bg-emerald-500'
+                                  : statusInfo.tone === 'warning'
+                                    ? 'bg-amber-500'
+                                    : 'bg-rose-500'
+                              }`}
+                            />
                           </div>
-                          <p className="truncate text-[12.5px] text-ink-muted">
-                            @{a.handle} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
-                          </p>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            <Badge tone={st.tone}>{st.label}</Badge>
-                            {a.brandName && (
-                              <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-faint">
-                                <span className="h-2 w-2 rounded-full" style={{ background: a.brandColor ?? '#94a3b8' }} />
-                                {a.brandName}
-                              </span>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="truncate text-[14px] font-bold text-ink">{a.displayName}</h4>
+                              <Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>
+                            </div>
+
+                            <p className="truncate text-[12.5px] text-ink-muted">
+                              {a.handle} · {ACCOUNT_TYPE_LABELS[a.accountType] || a.accountType}
+                            </p>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-muted">
+                              {a.brandName && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-surface-muted px-2 py-0.5 font-medium text-ink">
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ background: a.brandColor || '#94a3b8' }}
+                                  />
+                                  {a.brandName}
+                                </span>
+                              )}
+                              {a.lastSyncedAt && (
+                                <span>Son kontrol: {formatRelative(a.lastSyncedAt)}</span>
+                              )}
+                            </div>
+
+                            {a.lastError && (
+                              <p className="mt-1.5 text-[11.5px] text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded p-1">
+                                {a.lastError}
+                              </p>
                             )}
                           </div>
-                          {a.lastError && (
-                            <p className="mt-1.5 text-[11.5px] text-danger">{a.lastError}</p>
-                          )}
-                          {a.lastSyncedAt && (
-                            <p className="mt-1 text-[11px] text-ink-faint">Son eşitleme: {formatRelative(a.lastSyncedAt)}</p>
-                          )}
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                      {/* Bottom actions */}
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
                         <select
-                          className="select h-8 w-auto min-w-[130px] py-0 text-[12px]"
-                          value={a.brandId ?? ''}
+                          className="input select h-8 py-0 text-[12px] max-w-[150px]"
+                          value={a.brandId || ''}
                           disabled={busyId === a.id}
-                          onChange={(e) => changeBrand(a, e.target.value)}
+                          onChange={(e) => handleChangeBrand(a.id, e.target.value)}
                         >
-                          <option value="">Marka atamadım</option>
+                          <option value="">Marka Seçilmedi</option>
                           {brands.map((b) => (
                             <option key={b.id} value={b.id}>
                               {b.name}
                             </option>
                           ))}
                         </select>
-                        <div className="ml-auto flex items-center gap-1">
-                          <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => runHealthCheck(a)} title="Bağlantı sağlığını denetle">
-                            <Icon name="shield" size={13} /> Bağlantıyı Test Et
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleHealthCheck(a)}
+                            disabled={busyId === a.id}
+                            className="btn-outline btn-sm inline-flex items-center gap-1"
+                            title="Bağlantı sağlığını denetle"
+                          >
+                            {busyId === a.id ? (
+                              <Spinner size={12} />
+                            ) : (
+                              <Icon name="check-circle" size={13} className="text-emerald-500" />
+                            )}
+                            Test Et
                           </button>
-                          {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
-                            <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
-                              <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
-                            </button>
-                          )}
-                          <button className="btn-ghost btn-sm" title="Bağlantıyı kaldır" disabled={busyId === a.id} onClick={() => remove(a)}>
-                            <Icon name="trash" size={14} />
+
+                          <button
+                            onClick={() => setDisconnectingAccount({ id: a.id, name: a.displayName, type: 'social' })}
+                            className="btn-ghost btn-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                            title="Bağlantıyı kaldır"
+                          >
+                            <Icon name="trash" size={13} />
                           </button>
                         </div>
                       </div>
-                    </li>
+                    </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Advertising Accounts */}
+        {(activeTab === 'all' || activeTab === 'ads') && (
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-ink">
+                Bağlı Reklam Hesapları ({ads.length})
+              </h3>
+            </div>
+
+            {ads.length === 0 ? (
+              <div className="card p-6 text-center">
+                <p className="text-[13px] text-ink-muted">
+                  Henüz bağlı bir reklam hesabınız bulunmuyor. Meta Ads veya Google Ads bağlamak için yukarıdaki kartlardan &ldquo;Hesap Bağla&rdquo; seçeneğini kullanın.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {ads.map((ad) => {
+                  const statusInfo = STATUS_MAP[ad.connectionStatus] || { label: ad.connectionStatus, tone: 'neutral' };
+                  return (
+                    <div key={ad.id} className="card card-pad flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start gap-3">
+                          <PlatformIcon platform={ad.provider === 'META' ? 'FACEBOOK' : (ad.provider as any)} size={38} rounded="lg" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="truncate text-[14px] font-bold text-ink">{ad.displayName}</h4>
+                              <Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>
+                            </div>
+                            <p className="font-mono text-[12px] text-ink-muted">
+                              Hesap No: {ad.providerAccountId} · {ad.currency || 'USD'}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-[11.5px] text-ink-muted">
+                              {ad.brandName && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-surface-muted px-2 py-0.5 font-medium text-ink">
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ background: ad.brandColor || '#94a3b8' }}
+                                  />
+                                  {ad.brandName}
+                                </span>
+                              )}
+                              <span>Zaman Dilimi: {ad.timezone || 'Europe/Istanbul'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-3">
+                        <a
+                          href="/app/reklamlar"
+                          className="inline-flex items-center gap-1 text-[12px] font-medium text-brand hover:underline"
+                        >
+                          <Icon name="activity" size={13} /> Kampanyaları Görüntüle
+                        </a>
+
+                        <button
+                          onClick={() => setDisconnectingAccount({ id: ad.id, name: ad.displayName, type: 'ad' })}
+                          className="btn-ghost btn-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                        >
+                          <Icon name="trash" size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Permission Consent Modal */}
+      {consentProvider && (
+        <Modal
+          open={Boolean(consentProvider)}
+          onClose={() => !startingOAuth && setConsentProvider(null)}
+          title={`${consentProvider.name} Bağlantısı`}
+          description="SocialFlow, resmî OAuth 2.0 üzerinden yetkilendirme talep eder. Parolanız asla istenmez."
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/80 bg-surface-muted/50 p-4">
+              <h4 className="text-[13px] font-bold text-ink mb-2">Talep Edilen Resmî İzinler</h4>
+              <ul className="space-y-2 text-[12.5px] text-ink-muted">
+                <li className="flex items-start gap-2">
+                  <Icon name="check" size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+                  <span><strong>Organik Yayınlama:</strong> Gönderi, hikaye ve reels içeriklerinizi yayınlama ve planlama.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Icon name="check" size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+                  <span><strong>Performans Analitiği:</strong> Beğeni, erişim ve etkileşim metriklerini okuma.</span>
+                </li>
+                {consentProvider.adsEnabled && (
+                  <li className="flex items-start gap-2">
+                    <Icon name="check" size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+                    <span><strong>Reklam Yönetimi:</strong> Reklam hesaplarını bağlama ve mevcut gönderileri reklama dönüştürme.</span>
+                  </li>
+                )}
               </ul>
-            </section>
-          ))}
-        </div>
+            </div>
+
+            {consentProvider.adsEnabled && (
+              <div>
+                <label className="label">Bağlantı Modu</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConnectionMode('ALL')}
+                    className={`rounded-xl border p-2.5 text-center text-[12px] font-medium transition-all ${
+                      connectionMode === 'ALL'
+                        ? 'border-brand bg-brand-50/50 dark:bg-brand-950/30 text-brand font-bold'
+                        : 'border-border text-ink-muted hover:border-border-strong'
+                    }`}
+                  >
+                    Tümü (Organik + Reklam)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConnectionMode('ORGANIC')}
+                    className={`rounded-xl border p-2.5 text-center text-[12px] font-medium transition-all ${
+                      connectionMode === 'ORGANIC'
+                        ? 'border-brand bg-brand-50/50 dark:bg-brand-950/30 text-brand font-bold'
+                        : 'border-border text-ink-muted hover:border-border-strong'
+                    }`}
+                  >
+                    Yalnızca Organik
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConnectionMode('ADS')}
+                    className={`rounded-xl border p-2.5 text-center text-[12px] font-medium transition-all ${
+                      connectionMode === 'ADS'
+                        ? 'border-brand bg-brand-50/50 dark:bg-brand-950/30 text-brand font-bold'
+                        : 'border-border text-ink-muted hover:border-border-strong'
+                    }`}
+                  >
+                    Yalnızca Reklam
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                className="btn-ghost btn-md"
+                disabled={startingOAuth}
+                onClick={() => setConsentProvider(null)}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-md inline-flex items-center gap-1.5"
+                disabled={startingOAuth}
+                onClick={startOAuthFlow}
+              >
+                {startingOAuth ? (
+                  <>
+                    <Spinner size={14} />
+                    Yönlendiriliyor…
+                  </>
+                ) : (
+                  <>
+                    <Icon name="link" size={14} />
+                    Resmî Girişe Devam Et
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
-      {addOpen && (
-        <AddAccountModal
-          brands={brands}
-          platforms={platforms}
-          demoMode={demoMode}
-          onClose={() => setAddOpen(false)}
-          onCreated={(acc) => {
-            setItems((prev) => [...prev, acc]);
-            setAddOpen(false);
-          }}
-        />
+      {/* Asset Discovery & Selection Modal */}
+      {discoveryKey && (
+        <Modal
+          open={Boolean(discoveryKey)}
+          onClose={() => setDiscoveryKey(null)}
+          title="Keşfedilen Hesaplar ve Varlıklar"
+          description="Erişim yetkiniz olan sayfalar ve reklam hesapları bulundu. SocialFlow'a bağlamak istediklerinizi seçin."
+        >
+          {loadingAssets ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-3">
+              <Spinner size={28} />
+              <p className="text-[13px] text-ink-muted">Sağlayıcı hesabınızdaki varlıklar taranıyor…</p>
+            </div>
+          ) : discoveredAssets.length === 0 ? (
+            <div className="py-8 text-center text-[13px] text-ink-muted">
+              Bağlanabilir bir varlık bulunamadı.
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {discoveredAssets.map((asset) => (
+                <div
+                  key={asset.id}
+                  className="rounded-xl border border-border/80 bg-surface p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {asset.avatarUrl ? (
+                      <img
+                        src={asset.avatarUrl}
+                        alt={asset.name}
+                        className="h-10 w-10 rounded-full object-cover shrink-0 border border-border"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-surface-muted flex items-center justify-center shrink-0">
+                        <Icon name="users" size={18} className="text-ink-muted" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[13.5px] font-bold text-ink truncate">{asset.name}</p>
+                        <Badge tone="neutral">{ASSET_TYPE_LABELS[asset.type] || asset.type}</Badge>
+                      </div>
+                      <p className="text-[12px] text-ink-muted truncate">
+                        {asset.handle || `ID: ${asset.externalId}`}
+                        {asset.currency ? ` · ${asset.currency}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!asset.alreadyConnected && (
+                      <select
+                        className="input select h-8 py-0 text-[12px]"
+                        value={selectedBrandMap[asset.id] || ''}
+                        onChange={(e) => setSelectedBrandMap({ ...selectedBrandMap, [asset.id]: e.target.value })}
+                      >
+                        <option value="">Marka Seçin</option>
+                        {brands.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    <button
+                      disabled={asset.alreadyConnected || importingAssetId === asset.id}
+                      onClick={() => handleImportAsset(asset)}
+                      className={`btn-sm ${
+                        asset.alreadyConnected
+                          ? 'btn-ghost text-emerald-600 cursor-default'
+                          : 'btn-primary'
+                      }`}
+                    >
+                      {importingAssetId === asset.id ? (
+                        <>
+                          <Spinner size={12} />
+                          Bağlanıyor…
+                        </>
+                      ) : asset.alreadyConnected ? (
+                        '✓ Bağlandı'
+                      ) : (
+                        'Hesabı Bağla'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end border-t border-border pt-4 mt-4">
+            <button
+              type="button"
+              className="btn-primary btn-md"
+              onClick={() => setDiscoveryKey(null)}
+            >
+              Tamamla
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Disconnect Confirmation Modal */}
+      {disconnectingAccount && (
+        <Modal
+          open={Boolean(disconnectingAccount)}
+          onClose={() => !disconnecting && setDisconnectingAccount(null)}
+          title="Bağlantıyı Kaldır"
+          description={`${disconnectingAccount.name} bağlantısını kaldırmak istediğinizden emin misiniz?`}
+        >
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-muted">
+              Hesabın erişim anahtarları sistemden tamamen silinecek ve otomatik paylaşımlar durdurulacaktır. Mevcut yayın geçmişiniz ve raporlarınız korunur.
+            </p>
+
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                className="btn-ghost btn-md"
+                disabled={disconnecting}
+                onClick={() => setDisconnectingAccount(null)}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="btn-danger btn-md inline-flex items-center gap-1.5"
+                disabled={disconnecting}
+                onClick={confirmDisconnect}
+              >
+                {disconnecting ? (
+                  <>
+                    <Spinner size={14} />
+                    Kaldırılıyor…
+                  </>
+                ) : (
+                  <>
+                    <Icon name="trash" size={14} />
+                    Bağlantıyı Kaldır
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
-  );
-}
-
-function AddAccountModal({
-  brands,
-  platforms,
-  demoMode,
-  onClose,
-  onCreated
-}: {
-  brands: { id: string; name: string }[];
-  platforms: { code: string; name: string; color: string }[];
-  demoMode: boolean;
-  onClose: () => void;
-  onCreated: (acc: AccountItem) => void;
-}) {
-  const toast = useToast();
-  const [platform, setPlatform] = useState(platforms[0]?.code ?? 'INSTAGRAM');
-  const [handle, setHandle] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [accountType, setAccountType] = useState('PROFILE');
-  const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
-  const [saving, setSaving] = useState(false);
-
-  async function submit() {
-    if (!handle.trim()) {
-      toast.error('Kullanıcı adı gerekli', 'Bağlanacak hesabın kullanıcı adını girin.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await api.post<{ id: string; handle: string; demoAccount: boolean; connectionStatus: string }>('/api/accounts', {
-        platform,
-        handle: handle.trim().replace(/^@/, ''),
-        displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
-        accountType,
-        brandId: brandId || null,
-        demoAccount: demoMode
-      });
-      const brand = brands.find((b) => b.id === brandId);
-      onCreated({
-        id: res.id,
-        platform,
-        handle: res.handle,
-        displayName: displayName.trim() || handle.trim().replace(/^@/, ''),
-        avatarUrl: null,
-        accountType,
-        connectionStatus: res.connectionStatus,
-        demoAccount: res.demoAccount,
-        lastError: null,
-        brandId: brandId || null,
-        brandName: brand?.name ?? null,
-        brandColor: null,
-        externalId: null,
-        tokenExpiresAt: null,
-        lastSyncedAt: null
-      });
-      toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
-    } catch (e) {
-      toast.error('Eklenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Hesap Bağla"
-      footer={
-        <div className="flex justify-end gap-2">
-          <button className="btn-secondary btn-md" onClick={onClose}>
-            Vazgeç
-          </button>
-          <button className="btn-primary btn-md" onClick={submit} disabled={saving}>
-            {saving ? 'Ekleniyor…' : 'Hesabı Ekle'}
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        {demoMode && (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink">
-            Demo modunda hesaplar simülasyon olarak eklenir. Gerçek yayınlarda resmî OAuth akışı kullanılır.
-          </p>
-        )}
-        <div>
-          <label className="label">Platform</label>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {platforms.map((p) => (
-              <button
-                key={p.code}
-                type="button"
-                onClick={() => setPlatform(p.code)}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-medium transition-colors ${
-                  platform === p.code ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-line text-ink-muted hover:bg-surface-subtle'
-                }`}
-              >
-                <PlatformIcon platform={p.code} size={24} rounded="md" muted={platform !== p.code} />
-                <span className="truncate">{p.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="label">Kullanıcı adı</label>
-            <input className="input" placeholder="ornekmarka" value={handle} onChange={(e) => setHandle(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Görünen ad</label>
-            <input className="input" placeholder="Örnek Marka" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Hesap türü</label>
-            <select className="select" value={accountType} onChange={(e) => setAccountType(e.target.value)}>
-              <option value="PROFILE">Profil</option>
-              <option value="PAGE">Sayfa</option>
-              <option value="BUSINESS">İşletme</option>
-            </select>
-          </div>
-          <div>
-            <label className="label">Marka</label>
-            <select className="select" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
-              <option value="">Atamadım</option>
-              {brands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-    </Modal>
   );
 }
