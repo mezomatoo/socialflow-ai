@@ -719,6 +719,10 @@ Detaylı bilgi almak için web sitemizi ziyaret edebilirsiniz: https://kahvedukk
     }
   });
 
+  console.log('→ AI prompt şablonları yükleniyor...');
+  const { ensureDefaultTemplates } = await import('../src/lib/ai/promptTemplates');
+  await ensureDefaultTemplates();
+
   console.log('');
   console.log('✅ Seed tamamlandı.');
   console.log('   Giriş: demo@socialflow.ai / Sosyal2026!');

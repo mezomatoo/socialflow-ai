@@ -7,6 +7,7 @@ import {
   parseJsonLoose,
   unavailableCapabilities
 } from './provider';
+import { estimateCost, estimateTokens, trackUsage } from './usage';
 
 export { parseJsonLoose };
 
@@ -35,6 +36,8 @@ export interface LlmRequest {
   maxTokens?: number;
   /** Kısa tanımlayıcı; loglama ve maliyet takibi için. */
   task: string;
+  /** Verilirse AI kullanım kaydı (AiUsage) bu çalışma alanına yazılır (§57). */
+  usage?: { workspaceId: string; userId?: string | null; brandId?: string | null };
 }
 
 export interface LlmResult {
@@ -93,9 +96,26 @@ export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null
   const started = Date.now();
 
   if (adapter.name === 'deterministic') {
+    const ms = Date.now() - started;
+    // Yerel motor da kullanım kaydına yazılır (maliyet 0 — dürüst raporlama, §57).
+    if (req.usage) {
+      await trackUsage({
+        workspaceId: req.usage.workspaceId,
+        userId: req.usage.userId,
+        brandId: req.usage.brandId,
+        provider: 'deterministic',
+        service: 'textGeneration',
+        task: req.task,
+        tokensIn: estimateTokens(req.system + req.user),
+        tokensOut: 0,
+        durationMs: ms,
+        costUSD: 0,
+        meta: { degraded: true, estimated: true }
+      });
+    }
     return {
       data: null,
-      result: { text: '', provider: 'deterministic', model: null, degraded: true, ms: Date.now() - started }
+      result: { text: '', provider: 'deterministic', model: null, degraded: true, ms }
     };
   }
 
@@ -115,6 +135,21 @@ export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null
         message: outcome.failureMessage ?? 'AI sağlayıcısına ulaşılamadı.'
       };
     }
+    if (req.usage) {
+      await trackUsage({
+        workspaceId: req.usage.workspaceId,
+        userId: req.usage.userId,
+        brandId: req.usage.brandId,
+        provider: outcome.degraded ? 'deterministic' : outcome.provider,
+        service: 'textGeneration',
+        task: req.task,
+        tokensIn: estimateTokens(req.system + req.user),
+        tokensOut: estimateTokens(outcome.text),
+        durationMs: outcome.durationMs,
+        costUSD: outcome.degraded ? 0 : estimateCost('textGeneration', estimateTokens(outcome.text)),
+        meta: { failed: outcome.failed, estimated: true }
+      });
+    }
     return {
       data: null,
       result: {
@@ -127,6 +162,21 @@ export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null
     };
   }
 
+  if (req.usage) {
+    await trackUsage({
+      workspaceId: req.usage.workspaceId,
+      userId: req.usage.userId,
+      brandId: req.usage.brandId,
+      provider: outcome.provider,
+      service: 'textGeneration',
+      task: req.task,
+      tokensIn: estimateTokens(req.system + req.user),
+      tokensOut: estimateTokens(outcome.text),
+      durationMs: outcome.durationMs,
+      costUSD: estimateCost('textGeneration', estimateTokens(outcome.text)),
+      meta: { estimated: true }
+    });
+  }
   return {
     data: outcome.data as T,
     result: {
