@@ -59,7 +59,8 @@ export async function getConversation(actor: Actor, id: string) {
     assignments: { orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, assignedTo: true, createdAt: true, actor: { select: { name: true } } } }
   } });
   if (!result) throw missing();
-  return result;
+  const link = isFeatureEnabled('socialCRM') ? await prisma.contactConversationLink.findFirst({ where: { workspaceId: actor.workspaceId, conversationId: id }, select: { contactId: true } }) : null;
+  return { ...result, crmContactId: link?.contactId ?? null };
 }
 
 /** Authenticated, explicitly manual input. Not a provider webhook or provider-verified identity. */

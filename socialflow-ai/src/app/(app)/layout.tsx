@@ -21,6 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <AppShell
           inboxEnabled={isFeatureEnabled('unifiedInbox')}
           catalogEnabled={isFeatureEnabled('productCatalog')}
+          crmEnabled={isFeatureEnabled('socialCRM')}
           advertisingEnabled={isFeatureEnabled('paidMedia') && canAdvertising(session.user.role, 'ads:view')}
           user={{
             id: session.user.id,
