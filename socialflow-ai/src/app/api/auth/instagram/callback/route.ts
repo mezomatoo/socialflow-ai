@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { apiRoute } from '@/lib/api';
-import { env } from '@/lib/env';
 import { completeInstagramConnection } from '@/lib/social/instagramConnection';
 import { InstagramConnectionError } from '@/lib/social/instagramConnectionMessages';
 import { audit } from '@/lib/security/audit';
@@ -14,9 +13,9 @@ export const GET = apiRoute(async (request, { session }) => {
     await audit({ workspaceId: session.user.workspaceId, userId: session.user.id, action: 'account.connect.rejected', metadata: { platform: 'INSTAGRAM', reason: result } });
   }
   // Static destination + static result code only. No state/code/provider error body in the redirect.
-  const target = new URL('/sosyal-hesaplar', env.appUrl);
-  target.searchParams.set('baglanti', result);
-  const response = NextResponse.redirect(target, 303);
+  const response = new NextResponse(null, { status: 303, headers: {
+    Location: `/sosyal-hesaplar?baglanti=${encodeURIComponent(result)}`
+  } });
   response.headers.set('Cache-Control', 'no-store');
   response.headers.set('Referrer-Policy', 'no-referrer');
   return response;

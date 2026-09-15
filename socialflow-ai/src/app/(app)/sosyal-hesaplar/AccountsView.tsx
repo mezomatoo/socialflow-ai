@@ -230,7 +230,7 @@ export function AccountsView({
                         <div className="ml-auto flex items-center gap-1">
                           {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
-                              <Icon name="refresh" size={13} /> Yeniden Bağla
+                              <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
                             </button>
                           )}
                           <button className="btn-ghost btn-sm" title="Bağlantıyı kaldır" disabled={busyId === a.id} onClick={() => remove(a)}>
@@ -273,7 +273,6 @@ function AddAccountModal({
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
-  connectionResult?: string | null;
   onClose: () => void;
   onCreated: (acc: AccountItem) => void;
 }) {
