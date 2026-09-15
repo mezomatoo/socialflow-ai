@@ -267,6 +267,12 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
         : null
     });
 
+    // Sağlayıcı denendi ve başarısız olduysa kullanıcıya dürüst uyarı gösterilir.
+    if (out.aiFailure) {
+      aiFailed = true;
+      aiErrorCode = out.aiFailure.code;
+    }
+
     // Yapay zekâ üretimi kaydı (§39) — gizli bilgi saklanmaz, yalnızca özet.
     await recordGeneration({
       workspaceId: input.workspaceId,
@@ -279,8 +285,8 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
       platform: t.platform,
       contentType: t.contentType,
       prompt: `${content.masterCaption}\n---\n${rule.platform}:${rule.contentType}`,
-      status: out.engine === 'LLM' ? 'SUCCESS' : 'SKIPPED',
-      errorCode: out.engine === 'LLM' ? null : 'LOCAL_ENGINE',
+      status: out.engine === 'LLM' ? 'SUCCESS' : out.aiFailure ? 'FAILED' : 'SKIPPED',
+      errorCode: out.engine === 'LLM' ? null : (out.aiFailure?.code ?? 'LOCAL_ENGINE'),
       durationMs: Date.now() - startedAt,
       metadata: {
         engine: out.engine,

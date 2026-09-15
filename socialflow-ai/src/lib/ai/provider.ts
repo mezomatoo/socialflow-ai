@@ -166,7 +166,7 @@ function openAiAdapter(): AiProviderAdapter {
 
     return withTimeout(
       async (signal) => {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        const res = await fetch(`${env.ai.openaiBaseUrl}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -184,7 +184,7 @@ function openAiAdapter(): AiProviderAdapter {
         const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
         return json.choices?.[0]?.message?.content ?? '';
       },
-      req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      req.timeoutMs ?? env.ai.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       'openai'
     );
   };
@@ -234,7 +234,7 @@ function anthropicAdapter(): AiProviderAdapter {
   const call = async (req: AiGenerationRequest) => {
     return withTimeout(
       async (signal) => {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(`${env.ai.anthropicBaseUrl}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -259,7 +259,7 @@ function anthropicAdapter(): AiProviderAdapter {
         const json = (await res.json()) as { content?: { type: string; text?: string }[] };
         return json.content?.map((c) => c.text ?? '').join('\n') ?? '';
       },
-      req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      req.timeoutMs ?? env.ai.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       'anthropic'
     );
   };

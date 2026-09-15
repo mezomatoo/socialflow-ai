@@ -71,8 +71,25 @@ export function upcomingCapabilities() {
  * DURDURMAZ (§69). `result.failed` true ise sağlayıcı gerçekten denenmiş ve
  * başarısız olmuştur; arayüz bunu kullanıcıya bildirir.
  */
+export interface AiFailureInfo {
+  provider: string;
+  model: string | null;
+  code: string;
+  message: string;
+}
+
+/** Son sağlayıcı hatası (arayüzde dürüst uyarı göstermek için). */
+let lastAiFailure: AiFailureInfo | null = null;
+
+export function consumeAiFailure(): AiFailureInfo | null {
+  const value = lastAiFailure;
+  lastAiFailure = null;
+  return value;
+}
+
 export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null; result: LlmResult }> {
   const adapter = getAiAdapter();
+  lastAiFailure = null;
   const started = Date.now();
 
   if (adapter.name === 'deterministic') {
@@ -88,6 +105,16 @@ export async function completeJson<T>(req: LlmRequest): Promise<{ data: T | null
   );
 
   if (outcome.data === null) {
+    // Sağlayıcı gerçekten çağrıldı ve başarısız olduysa bunu kayda geçir; arayüz
+    // "AI servisine ulaşılamıyor, metinler yerel motorla üretildi" der (§69).
+    if (outcome.failed) {
+      lastAiFailure = {
+        provider: outcome.provider,
+        model: outcome.model,
+        code: 'AI_UNAVAILABLE',
+        message: outcome.failureMessage ?? 'AI sağlayıcısına ulaşılamadı.'
+      };
+    }
     return {
       data: null,
       result: {

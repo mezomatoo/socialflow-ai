@@ -2,7 +2,7 @@ import { charLength, extractHashtagTokens, extractMentions, extractProtectedTerm
 import type { ContentType, PlatformCode } from '../platforms/platforms';
 import { PLATFORM_META } from '../platforms/platforms';
 import type { PlatformRuleView } from '../rules/ruleEngine';
-import { AI_SAFETY_RULES, completeJson } from './llmClient';
+import { AI_SAFETY_RULES, completeJson, consumeAiFailure, type AiFailureInfo } from './llmClient';
 import { adaptationProfile, targetLengthFor, type AdaptationProfile } from '../platforms/adaptationProfiles';
 import { applyStyleLocally, buildBrandVoicePrompt, type BrandVoiceInput } from './brandVoice';
 import {
@@ -52,6 +52,8 @@ export interface AdaptationInput {
 
 export interface AdaptationOutput {
   caption: string;
+  /** Harici sağlayıcı denendi ve başarısız olduysa doldurulur (§69). */
+  aiFailure: AiFailureInfo | null;
   title?: string | null;
   hashtags: string[];
   hashtagBlock: string;
@@ -311,6 +313,7 @@ export async function adaptCaption(input: AdaptationInput): Promise<AdaptationOu
 
   return {
     caption,
+    aiFailure: consumeAiFailure(),
     title,
     hashtags: hashtagResult.selected.map((h) => h.tag),
     hashtagBlock,
