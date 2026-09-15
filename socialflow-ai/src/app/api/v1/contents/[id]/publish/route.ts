@@ -8,7 +8,7 @@ import { audit } from '@/lib/security/audit';
 /** "Şimdi Yayınla" — tüm hedefleri sırayla yayınlar (kısmi başarı korunur). */
 export const POST = apiRoute(
   async (request, { session, params }) => {
-    assertModuleEnabled('socialPublishing');
+  assertModuleEnabled('socialPublishing');
     const content = await prisma.content.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
     if (!content) return badRequest('İçerik bulunamadı.');
 

@@ -277,6 +277,67 @@ export function ComposerView({
     }
   }
 
+
+  /* --- platform medya varyantı kalıcılığı (§42–43) --------------------------
+   * Önizleme canvas'ı hedef oranı tarayıcıda üretir; üretilen türev sunucuya
+   * yüklenir (MediaVariant + PlatformContent.renderedKey). Orijinal dosya
+   * asla değiştirilmez; aynı oran/odak için tekrar yükleme yapılmaz.
+   * Yöntem etiketi dürüsttür: elle odak → USER_FOCAL_POINT, aksi DETERMINISTIC
+   * ("AI akıllı kırpma" denmez). */
+  const variantTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const variantSigs = useRef<Record<string, string>>({});
+  const [variantStates, setVariantStates] = useState<Record<string, 'saving' | 'saved' | 'error'>>({});
+
+  function handleVariantRendered(t: Target, src: MediaAsset, ratio: string, out: { dataUrl: string; width: number; height: number; bytes: number }) {
+    const sig = `${src.id}|${ratio}|${t.cropMode ?? 'SMART'}|${JSON.stringify(t.focalPoint ?? null)}`;
+    if (variantSigs.current[t.id] === sig) return;
+    clearTimeout(variantTimers.current[t.id]);
+    variantTimers.current[t.id] = setTimeout(() => {
+      void persistVariant(t, src, ratio, out, sig);
+    }, 1200);
+  }
+
+  async function persistVariant(t: Target, src: MediaAsset, ratio: string, out: { dataUrl: string; width: number; height: number; bytes: number }, sig: string) {
+    if (variantSigs.current[t.id] === sig) return;
+    variantSigs.current[t.id] = sig;
+    setVariantStates((prev) => ({ ...prev, [t.id]: 'saving' }));
+    try {
+      const blob = await (await fetch(out.dataUrl)).blob();
+      const fd = new FormData();
+      fd.append('mode', 'variant');
+      fd.append('parentMediaId', src.id);
+      fd.append('platform', t.platform);
+      fd.append('contentType', t.contentType);
+      fd.append('ratio', ratio);
+      fd.append('width', String(out.width));
+      fd.append('height', String(out.height));
+      fd.append('cropMode', t.cropMode ?? 'SMART');
+      fd.append('method', t.cropMode === 'MANUAL' || t.focalPoint ? 'USER_FOCAL_POINT' : 'DETERMINISTIC');
+      fd.append('focalPoint', JSON.stringify(t.focalPoint ?? null));
+      fd.append('blob', blob, `varyant-${t.platform.toLowerCase()}-${ratio.replace(':', 'x')}.jpg`);
+      const saved = await api.upload<{ storageKey: string; publicUrl: string | null }>('/api/media/upload', fd);
+
+      await api.patch(`/api/contents/${content.id}/platform-content/${t.id}`, {
+        aspectRatio: ratio,
+        renderedKey: saved.storageKey,
+        renderedUrl: saved.publicUrl ?? null,
+        targetWidth: out.width,
+        targetHeight: out.height
+      });
+      setContent((prev) => ({
+        ...prev,
+        platformContents: prev.platformContents.map((x) =>
+          x.id === t.id ? { ...x, aspectRatio: ratio, renderedKey: saved.storageKey, renderedUrl: saved.publicUrl ?? null } : x
+        )
+      }));
+      setVariantStates((prev) => ({ ...prev, [t.id]: 'saved' }));
+    } catch (e) {
+      variantSigs.current[t.id] = '';
+      setVariantStates((prev) => ({ ...prev, [t.id]: 'error' }));
+      toast.error('Medya varyantı kaydedilemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    }
+  }
+
   /* --- odak / oran --- */
   async function saveVisual(t: Target, patch: { focalPoint?: any; aspectRatio?: string; cropMode?: string }) {
     setContent((prev) => ({
@@ -646,6 +707,11 @@ export function ComposerView({
                 onAssignAccount={(id) => assignAccount(t, id)}
                 onAdapt={() => adaptOne(t)}
                 onVisual={(patch) => saveVisual(t, patch)}
+                onRendered={(out) => {
+                  const src = t.mediaAsset ?? masterMedia;
+                  if (src) handleVariantRendered(t, src, t.aspectRatio ?? t.rule?.recommendedAspectRatio ?? '1:1', out);
+                }}
+                variantState={variantStates[t.id]}
                 demoMode={demoMode}
               />
             ))
@@ -760,6 +826,8 @@ function TargetCard({
   onAssignAccount,
   onAdapt,
   onVisual,
+  onRendered,
+  variantState,
   demoMode
 }: {
   t: Target;
@@ -773,6 +841,9 @@ function TargetCard({
   onAssignAccount: (id: string | null) => void;
   onAdapt: () => void;
   onVisual: (patch: { focalPoint?: any; aspectRatio?: string; cropMode?: string }) => void;
+  /** Canvas'ta üretilen varyantın kaydedilmesi için üst bileşene bildirilir (§43). */
+  onRendered: (out: { dataUrl: string; width: number; height: number; bytes: number }) => void;
+  variantState?: 'saving' | 'saved' | 'error';
   demoMode: boolean;
 }) {
   const [showChecks, setShowChecks] = useState(false);
@@ -820,7 +891,25 @@ function TargetCard({
             cropMode={(t.cropMode as any) ?? 'SMART'}
             editable
             onFocalChange={(fp) => onVisual({ focalPoint: fp })}
+            onRendered={onRendered}
           />
+          {variantState ? (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
+              {variantState === 'saving' ? (
+                <>
+                  <Spinner size={11} /> Varyant kaydediliyor…
+                </>
+              ) : variantState === 'saved' ? (
+                <>
+                  <Icon name="check" size={12} className="text-success" /> Varyant kaydedildi
+                </>
+              ) : (
+                <>
+                  <Icon name="alert-triangle" size={12} className="text-danger" /> Varyant kaydedilemedi
+                </>
+              )}
+            </p>
+          ) : null}
           {t.rule && t.rule.supportedAspectRatios.length > 1 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {t.rule.supportedAspectRatios.map((r) => (

@@ -4,7 +4,7 @@ import { getMetricSummary, generateInsights } from '@/lib/services/analyticsServ
 
 /** Analizler — yalnızca gerçek API verisi; sahte metrik üretilmez. */
 export const GET = apiRoute(async (request, { session }) => {
-    assertModuleEnabled('analytics');
+  assertModuleEnabled('analytics');
   const url = new URL(request.url);
   const days = Number(url.searchParams.get('days') ?? 30);
   const summary = await getMetricSummary(session.user.workspaceId, {

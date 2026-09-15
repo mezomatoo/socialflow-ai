@@ -7,7 +7,7 @@ import { aiModeLabel } from '@/lib/ai/llmClient';
 /** AI İçerik Asistanı */
 export const POST = apiRoute(
   async (request, { session }) => {
-    assertModuleEnabled('aiAssistant');
+  assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const task = String(body.task ?? '') as AssistantTask;
     if (!TASK_LABELS[task]) return badRequest('Geçersiz AI görevi.');

@@ -7,7 +7,7 @@ import prisma from '@/lib/prisma';
 /** AI Hashtag Önerileri */
 export const POST = apiRoute(
   async (request, { session }) => {
-    assertModuleEnabled('aiAssistant');
+  assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const platform = body.platform ? String(body.platform) : null;
     const contentType = body.contentType ? String(body.contentType) : null;

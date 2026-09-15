@@ -4,7 +4,7 @@ import { checkTurkishSpelling } from '@/lib/ai/captionGenerationService';
 
 export const POST = apiRoute(
   async (request) => {
-    assertModuleEnabled('aiAssistant');
+  assertModuleEnabled('aiAssistant');
     const body = await request.json().catch(() => ({}));
     const result = checkTurkishSpelling(String(body.text ?? ''));
     return ok(result);

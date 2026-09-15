@@ -5,7 +5,7 @@ import { recommendPublishingTimes } from '@/lib/ai/publishingTimeService';
 /** "En İyi Saati AI ile Öner" */
 export const POST = apiRoute(
   async (request, { session }) => {
-    assertModuleEnabled('scheduling');
+  assertModuleEnabled('scheduling');
     const body = await request.json().catch(() => ({}));
     const out = await recommendPublishingTimes(session.user.workspaceId, {
       platform: body.platform ? String(body.platform) : undefined,

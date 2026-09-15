@@ -6,7 +6,7 @@ import { audit } from '@/lib/security/audit';
 /** "Planla" */
 export const POST = apiRoute(
   async (request, { session, params }) => {
-    assertModuleEnabled('scheduling');
+  assertModuleEnabled('scheduling');
     const body = await request.json().catch(() => ({}));
 
     if (body.cancel === true) {

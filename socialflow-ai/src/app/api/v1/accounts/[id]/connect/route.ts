@@ -13,7 +13,7 @@ import type { PlatformCode } from '@/lib/platforms/platforms';
  */
 export const POST = apiRoute(
   async (request, { session, params }) => {
-    assertModuleEnabled('socialAccounts');
+  assertModuleEnabled('socialAccounts');
     const account = await prisma.socialAccount.findFirst({ where: { id: params.id, workspaceId: session.user.workspaceId } });
     if (!account) return badRequest('Hesap bulunamadı.');
 

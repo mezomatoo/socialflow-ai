@@ -6,7 +6,7 @@ import { retryPlatformContent } from '@/lib/social/publishingService';
 /** "Tekrar Dene" — yalnızca başarısız hedefler. */
 export const POST = apiRoute(
   async (request, { session, params }) => {
-    assertModuleEnabled('socialPublishing');
+  assertModuleEnabled('socialPublishing');
     const body = await request.json().catch(() => ({}));
     const ids: string[] = Array.isArray(body.platformContentIds) && body.platformContentIds.length
       ? body.platformContentIds.map(String)
