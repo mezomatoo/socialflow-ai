@@ -21,7 +21,8 @@ export type AiGenerationType =
   | 'HASHTAGS'
   | 'SPELLCHECK'
   | 'PUBLISHING_TIME'
-  | 'STORY_TEXT';
+  | 'STORY_TEXT'
+  | 'STUDIO_IMAGE';
 
 export type AiGenerationStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED';
 

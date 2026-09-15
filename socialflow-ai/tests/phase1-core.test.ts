@@ -215,7 +215,7 @@ describe('Modül kapıları (sahte çalışma yok)', () => {
     assert.equal(state.notifications.enabled, true);
     assert.equal(state.aiAssistant.enabled, true);
     assert.equal(state.automation.enabled, false);
-    assert.equal(state.creativeStudio.enabled, false);
+    assert.equal(state.creativeStudio.enabled, true, 'AI Stüdyo tam zincirle çalıştığı için varsayılan açıktır');
     assert.ok(moduleNotice('analytics').length > 10);
     // Müşteriye dönük mesajlarda geliştirme fazı terminolojisi yoktur
     for (const mod of Object.values(state)) {

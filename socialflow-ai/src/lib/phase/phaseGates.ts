@@ -87,8 +87,8 @@ export const MODULE_GATES: Record<ModuleId, ModuleGate> = {
     id: 'creativeStudio',
     phase: 4,
     label: 'Kreatif Stüdyo',
-    defaultEnabled: false,
-    notice: 'Gelişmiş kreatif üretimi bu kurulumda henüz etkin değil.'
+    defaultEnabled: true,
+    notice: 'Gelişmiş kreatif üretimi bu kurulumda kapalı.'
   },
   automation: {
     id: 'automation',
