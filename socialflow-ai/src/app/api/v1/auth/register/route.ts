@@ -79,6 +79,7 @@ export const POST = apiRoute(
           name: workspaceName,
           slug,
           plan: 'FREE',
+          // Canlıya hazır: yeni çalışma alanları GERÇEK modda başlar (§13).
           demoMode: false,
           appSettings: { create: {} }
         }
