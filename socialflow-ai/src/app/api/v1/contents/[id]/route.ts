@@ -1,6 +1,6 @@
 import { apiRoute, ok, notFound, badRequest } from '@/lib/api';
 import prisma from '@/lib/prisma';
-import { getContentDetail, updateMasterCaption, syncSelections, deleteContent } from '@/lib/services/contentService';
+import { getContentDetail, updateMasterCaption, syncSelections, deleteContent, ownedAccountId } from '@/lib/services/contentService';
 import { audit } from '@/lib/security/audit';
 
 export const GET = apiRoute(async (_request, { session, params }) => {
@@ -54,9 +54,11 @@ export const PATCH = apiRoute(
     // Platform bazlı hesap eşlemeleri
     if (Array.isArray(body.accountAssignments)) {
       for (const a of body.accountAssignments) {
+        // Hesap kimliği kiracıya ait değilse bağlanmaz (§57).
+        const accountId = a.accountId ? await ownedAccountId(session.user.workspaceId, String(a.accountId)) : null;
         await prisma.platformContent.updateMany({
           where: { id: String(a.platformContentId), contentId: params.id },
-          data: { socialAccountId: a.accountId ? String(a.accountId) : null }
+          data: { socialAccountId: accountId }
         });
       }
     }

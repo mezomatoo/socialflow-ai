@@ -187,10 +187,13 @@ export async function saveVariant(input: VariantUploadInput) {
 }
 
 export async function updateFocalPoint(mediaId: string, workspaceId: string, focalPoint: FocalPoint) {
-  return prisma.mediaAsset.update({
-    where: { id: mediaId },
+  // Kiracı izolasyonu (§57): güncelleme WHERE içinde workspaceId taşır.
+  const res = await prisma.mediaAsset.updateMany({
+    where: { id: mediaId, workspaceId },
     data: { focalPoint: JSON.stringify({ ...focalPoint, method: 'MANUAL' }) }
   });
+  if (res.count === 0) throw notFound('Medya bulunamadı.');
+  return prisma.mediaAsset.findFirstOrThrow({ where: { id: mediaId, workspaceId } });
 }
 
 export async function listMedia(

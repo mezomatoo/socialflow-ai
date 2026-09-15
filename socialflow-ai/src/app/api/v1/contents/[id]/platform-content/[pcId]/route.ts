@@ -1,8 +1,13 @@
 import { apiRoute, ok, badRequest } from '@/lib/api';
-import { updatePlatformCaption, restoreOriginalCaption } from '@/lib/services/contentService';
+import { updatePlatformCaption, restoreOriginalCaption, ownedAccountId } from '@/lib/services/contentService';
+import { AppError } from '@/lib/errors';
 import prisma from '@/lib/prisma';
 
 /** Platforma özel metin/medya düzenleme. */
+function badRequestApp(message: string) {
+  return new AppError('VALIDATION_ERROR', message, { status: 400, recoverable: true });
+}
+
 export const PATCH = apiRoute(
   async (request, { session, params }) => {
     const pc = await prisma.platformContent.findFirst({
@@ -24,6 +29,8 @@ export const PATCH = apiRoute(
           userId: session.user.id
         });
       } catch (err) {
+        // Kural ihlali 422 + PLATFORM_RULE_VIOLATION olarak iletilir (normalize hata).
+        if (err instanceof AppError) throw err;
         return badRequest(err instanceof Error ? err.message : 'Metin güncellenemedi.');
       }
     }
@@ -43,8 +50,23 @@ export const PATCH = apiRoute(
     if (body.renderedUrl !== undefined) visual.renderedUrl = body.renderedUrl ? String(body.renderedUrl) : null;
     if (body.targetWidth !== undefined) visual.targetWidth = body.targetWidth ? Number(body.targetWidth) : null;
     if (body.targetHeight !== undefined) visual.targetHeight = body.targetHeight ? Number(body.targetHeight) : null;
-    if (body.mediaAssetId !== undefined) visual.mediaAssetId = body.mediaAssetId ? String(body.mediaAssetId) : null;
-    if (body.socialAccountId !== undefined) visual.socialAccountId = body.socialAccountId ? String(body.socialAccountId) : null;
+    if (body.mediaAssetId !== undefined) {
+      const mediaId = body.mediaAssetId ? String(body.mediaAssetId) : null;
+      if (mediaId) {
+        const owned = await prisma.mediaAsset.findFirst({
+          where: { id: mediaId, workspaceId: session.user.workspaceId },
+          select: { id: true }
+        });
+        if (!owned) throw badRequestApp('Bu medya bu çalışma alanına ait değil.');
+      }
+      visual.mediaAssetId = mediaId;
+    }
+    if (body.socialAccountId !== undefined) {
+      const raw = body.socialAccountId ? String(body.socialAccountId) : null;
+      const accId = raw ? await ownedAccountId(session.user.workspaceId, raw) : null;
+      if (raw && !accId) throw badRequestApp('Bu hesap bu çalışma alanına ait değil.');
+      visual.socialAccountId = accId;
+    }
     if (body.enabled !== undefined) visual.enabled = Boolean(body.enabled);
     if (body.safeAreaOk !== undefined) visual.safeAreaOk = Boolean(body.safeAreaOk);
 
@@ -52,7 +74,9 @@ export const PATCH = apiRoute(
       await prisma.platformContent.update({ where: { id: params.pcId }, data: { ...visual, updatedAt: new Date() } });
     }
 
-    const updated = await prisma.platformContent.findUnique({ where: { id: params.pcId } });
+    const updated = await prisma.platformContent.findFirst({
+      where: { id: params.pcId, content: { id: params.id, workspaceId: session.user.workspaceId } }
+    });
     return ok(updated);
   },
   { limit: 240 }

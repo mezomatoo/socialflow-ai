@@ -89,22 +89,32 @@ export async function createContent(input: CreateContentInput) {
  * Yeni seçimler eklenir, kaldırılanlar silinir (yayınlanmışlar korunur).
  */
 export async function syncSelections(contentId: string, workspaceId: string, selections: SelectionItem[]) {
+  const owner = await prisma.content.findFirst({ where: { id: contentId, workspaceId }, select: { id: true } });
+  if (!owner) throw notFound('İçerik bulunamadı.');
+  // PlatformContent'ta workspaceId kolonu yok; sahiplik üst içerik üzerinden
+  // yukarıda doğrulandı (§57).
   const existing = await prisma.platformContent.findMany({ where: { contentId } });
   const existingMap = new Map(existing.map((e) => [e.key, e]));
   const wantedKeys = new Set<string>();
 
-  for (const sel of selections) {
+  for (const raw of selections) {
+    // Platform/kapsam normalize edilir: "x" ile "X" aynı hedefi iki kez açmasın,
+    // desteklenmeyen platform/içerik türü sessizce kaydedilmesin (§57, §12).
+    const sel = normalizeSelection(raw);
+    if (!sel) throw new AppError('VALIDATION_ERROR', `Geçersiz platform seçimi: ${raw.platform} / ${raw.contentType}`, { status: 400, recoverable: true });
     const key = contentKey(sel.platform, sel.contentType);
     wantedKeys.add(key);
     const rule = await getRule(workspaceId, sel.platform, sel.contentType);
     const found = existingMap.get(key);
+    // Sosyal hesap kimliği de kiracıya ait olmalı (çapraz referans enjeksiyonu engeli).
+    const accountId = sel.accountId ? await ownedAccountId(workspaceId, sel.accountId) : null;
 
     if (found) {
       await prisma.platformContent.update({
         where: { id: found.id },
         data: {
           enabled: true,
-          socialAccountId: sel.accountId ?? found.socialAccountId,
+          socialAccountId: accountId ?? (sel.accountId ? null : found.socialAccountId),
           charLimit: rule?.maxCaptionLength ?? found.charLimit,
           aspectRatio: rule?.recommendedAspectRatio ?? found.aspectRatio
         }
@@ -116,7 +126,7 @@ export async function syncSelections(contentId: string, workspaceId: string, sel
           key,
           platform: sel.platform,
           contentType: sel.contentType,
-          socialAccountId: sel.accountId ?? null,
+          socialAccountId: accountId,
           charLimit: rule?.maxCaptionLength ?? 2200,
           aspectRatio: rule?.recommendedAspectRatio ?? null,
           status: 'DRAFT',
@@ -137,6 +147,29 @@ export async function syncSelections(contentId: string, workspaceId: string, sel
   }
 }
 
+
+
+/** Seçimi platform tanımlarına göre doğrular/normalize eder; geçersizse null. */
+function normalizeSelection(raw: SelectionItem): SelectionItem | null {
+  const platform = String(raw.platform ?? '').trim().toUpperCase();
+  const contentType = String(raw.contentType ?? '').trim().toUpperCase();
+  const meta = PLATFORM_META[platform as PlatformCode];
+  if (!meta || !meta.contentTypes.includes(contentType as ContentType)) return null;
+  return { platform: platform as PlatformCode, contentType: contentType as ContentType, accountId: raw.accountId ?? null };
+}
+
+/**
+ * Verilen sosyal hesap kimliği bu çalışma alanına aitse kimliği, aksi halde
+ * null döner — yabancı hesap kimlikleri içeriğe BAĞLANAMAZ (§57).
+ */
+export async function ownedAccountId(workspaceId: string, accountId: string) {
+  const acc = await prisma.socialAccount.findFirst({
+    where: { id: accountId, workspaceId },
+    select: { id: true }
+  });
+  return acc?.id ?? null;
+}
+
 export interface AdaptContentInput {
   contentId: string;
   workspaceId: string;
@@ -152,8 +185,10 @@ export interface AdaptContentInput {
  * Metin asla karakter sınırından kesilmez.
  */
 export async function adaptContentToPlatforms(input: AdaptContentInput) {
-  const content = await prisma.content.findUnique({
-    where: { id: input.contentId },
+  // Kiracı izolasyonu (§57): workspaceId WHERE içinde olmalı — sahiplik
+  // sonradan karşılaştırılırsa yabancı içerik yüklenmiş olur.
+  const content = await prisma.content.findFirst({
+    where: { id: input.contentId, workspaceId: input.workspaceId },
     include: {
       brand: { include: { voice: true } },
       campaign: true,
@@ -161,7 +196,7 @@ export async function adaptContentToPlatforms(input: AdaptContentInput) {
       platformContents: true
     }
   });
-  if (!content) throw new Error('İçerik bulunamadı.');
+  if (!content) throw notFound('İçerik bulunamadı.');
 
   const targets = content.platformContents.filter(
     (t) => t.enabled && (!input.targetIds?.length || input.targetIds.includes(t.id))

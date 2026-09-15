@@ -24,7 +24,10 @@ export const POST = apiRoute(
       ? preflight.targets.filter((t) => targetIds.includes(t.platformContentId) && t.ready)
       : preflight.targets.filter((t) => t.ready);
 
-    await prisma.content.update({ where: { id: params.id }, data: { status: 'PUBLISHING', scheduleMode: 'NOW' } });
+    await prisma.content.updateMany({
+      where: { id: params.id, workspaceId: session.user.workspaceId },
+      data: { status: 'PUBLISHING', scheduleMode: 'NOW' }
+    });
 
     const results = [];
     for (const t of targets) {
@@ -48,7 +51,10 @@ export const POST = apiRoute(
       request
     });
 
-    const fresh = await prisma.content.findUnique({ where: { id: params.id }, select: { status: true } });
+    const fresh = await prisma.content.findFirst({
+      where: { id: params.id, workspaceId: session.user.workspaceId },
+      select: { status: true }
+    });
     return ok({
       results,
       ready: results.filter((r) => r.ok).length,
