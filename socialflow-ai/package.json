@@ -20,7 +20,8 @@
     "test:instagram": "DATABASE_URL=\"file:./test.db\" DEMO_MODE=false APP_URL=https://oauth-test.invalid INSTAGRAM_APP_ID=test-only INSTAGRAM_APP_SECRET=test-only tsx --test tests/instagram-connection.test.ts",
     "test:accounts": "DATABASE_URL=\"file:./test.db\" DEMO_MODE=false tsx --test tests/account-registration.test.ts",
     "test:advertising:contracts": "tsx --test tests/advertising-contracts.test.ts",
-    "test:advertising": "DATABASE_URL=\"file:./test.db\" tsx --test tests/advertising-contracts.test.ts tests/advertising-service.test.ts"
+    "test:advertising": "DATABASE_URL=\"file:./test.db\" tsx --test tests/advertising-contracts.test.ts tests/advertising-service.test.ts",
+    "test:catalog": "DATABASE_URL=\"file:./test.db\" tsx --test tests/catalog.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
