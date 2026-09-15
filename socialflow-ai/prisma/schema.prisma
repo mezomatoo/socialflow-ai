@@ -89,7 +89,7 @@ model Workspace {
   name      String
   slug      String   @unique
   plan      String   @default("PRO") // FREE | PRO | AGENCY | ENTERPRISE
-  demoMode  Boolean  @default(true) // true => gerçek sosyal paylaşım yapılmaz
+  demoMode  Boolean  @default(false) // true => gerçek sosyal paylaşım yapılmaz (canlıda false)
   timezone  String   @default("Europe/Istanbul")
   locale    String   @default("tr-TR")
   createdAt DateTime @default(now())
@@ -512,7 +512,7 @@ model Publication {
   providerPostId    String?
   permalink         String?
   publishedAt       DateTime?
-  demoMode          Boolean   @default(true)
+  demoMode          Boolean   @default(false)
   attempts          Int       @default(0)
   maxAttempts       Int       @default(3)
   lastError         String?

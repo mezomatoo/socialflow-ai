@@ -72,7 +72,24 @@ Her işlem: test → typecheck/lint → (gerekiyorsa build) → atomik commit �
 10. **CD iş akışı** — staging/production environment ayrımı + concurrency + deployment kaydı (deploy hedefi altyapıya bağlı; iş akışı iskeleti + kilit).
 11. **Worker görünürlüğü** — iş başarısızlıklarında FAILED durum görünürlüğü + admin sağlık özeti (sahte yeşil yok).
 
-## 4. Bilinen Dış Bağımlılıklar (canlıya geçiş blokerleri)
+## 4. İşlem Günlüğü (atomik commit'ler)
+
+| Commit | İşlem | Test |
+|---|---|---|
+| `9a1e702` | Denetim matrisi (bu belge) | — |
+| `53353e4` | Health uçları (liveness + readiness, sahte yeşil yok) | 3/3 |
+| `eeaea5b` | Seed üretim güvenlik kapısı (SEED_ALLOW_PRODUCTION) | 4/4 |
+| `a833740` | GitHub Actions CI (typecheck+lint+test+build) | adımlar yerelde yeşil |
+| `6ca72dc` | Güvenlik başlıkları (nosniff/HSTS/CSP; üretimde frame DENY) | 4/4 |
+| `abcac00` | Sahte trend/rakip verisi kaldırıldı (dürüst boş durum) | 4/4 |
+| `524b6d5` | Müşteri arayüzünden demo ibareleri + sahte AI Geçmişi/medya verisi kaldırıldı; simülasyon disiplinliği "aksiyon anında dürüst bildirim"e indirgendi | 3/3 (+160 toplam) |
+| (bu commit) | Canlı varsayılanlar: register `demoMode:false`, env demo kapısı (üretimde zorunlu kapalı), şema/Publication/AppSettings varsayılanları canlı, middleware önizleme yalnız açık `DEMO_MODE=true` ile | 4/4 (+164 toplam) |
+
+> Not: `DEMO_MODE` ayırma mekanizması geliştirme/önizleme için korunur (§21);
+> üretimde `resolveDemoMode` tarafından zorunlu kapatılır. Müşteri arayüzünde
+> demo ibaresi kalmaz; simülasyon yalnızca aksiyon anında dürüstçe bildirilir.
+
+## 5. Bilinen Dış Bağımlılıklar (canlıya geçiş blokerleri)
 
 | Modül | Bloker | Gerekli |
 |---|---|---|
