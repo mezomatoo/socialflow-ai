@@ -217,7 +217,7 @@ export default async function BrandDetailPage({ params }: { params: { id: string
               </li>
               <li className="flex items-center justify-between px-5 py-2.5">
                 <span className="text-[12.5px] text-ink-muted">
-                  Sosyal hesaplar{!accountsEnabled && <span className="text-ink-faint"> · Faz 2</span>}
+                  Sosyal hesaplar{!accountsEnabled && <span className="text-ink-faint"> · kapalı</span>}
                 </span>
                 <span className="text-[13px] font-bold text-ink">{brand._count.socialAccounts}</span>
               </li>
