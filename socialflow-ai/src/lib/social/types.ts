@@ -106,8 +106,18 @@ export interface PublishResult {
   action?: { label: string; route: string } | null;
   /** Tekrar denenebilir mi? (429/5xx → true, 401/403 → genelde false) */
   retryable?: boolean;
+  /** Sağlayıcının Retry-After önerisi (ms) — varsa kuyruk bu süreye saygı gösterir. */
+  retryAfterMs?: number | null;
   /** Sağlayıcı tarafından zamanlandıysa */
   providerScheduled?: boolean;
+  /**
+   * Faz 2: sağlayıcı isteği kabul etti ama içerik hâlâ PLATFORM TARAFINDA
+   * işleniyor (ör. video transcode). Bu durumda PUBLISHED SANILMAZ;
+   * SyncPublicationStatusJob sonucu sonra doğrular (§42, §51).
+   */
+  processing?: boolean;
+  /** Faz 2: normalleştirilmiş hata kodu (sağlayıcı direkt verebiliyorsa). */
+  normalizedCode?: string | null;
   raw?: unknown;
 }
 

@@ -226,6 +226,9 @@ model SocialAccount {
   lastValidatedAt  DateTime?
   lastError        String? // kullanıcıya gösterilecek Türkçe, anlaşılır mesaj
   demoAccount      Boolean   @default(true)
+  // Faz 2: sağlayıcı yetenek bayrakları (JSON dizi) + son eşitleme zamanı.
+  capabilities     String    @default("[]") // PG: Json — ProviderCapability anahtarları
+  lastSyncedAt     DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -233,6 +236,7 @@ model SocialAccount {
   brand            Brand?               @relation(fields: [brandId], references: [id], onDelete: SetNull)
   token            SocialProviderToken?
   platformContents PlatformContent[]
+  publications     Publication[]
 
   @@unique([workspaceId, platform, handle])
   @@index([workspaceId, platform])
@@ -506,6 +510,8 @@ model Publication {
   id                String    @id @default(cuid())
   platformContentId String
   contentId         String
+  // Faz 2: yayın hangi sosyal hesaba yapıldı (hesap silinse bile kayıt korunur).
+  socialAccountId   String?
   // İdempotency anahtarı: retry'larda çift gönderim oluşmaz.
   idempotencyKey    String    @unique
   status            String    @default("PENDING") // PublicationStatus
@@ -516,14 +522,49 @@ model Publication {
   attempts          Int       @default(0)
   maxAttempts       Int       @default(3)
   lastError         String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  // Faz 2: normalleştirilmiş sağlayıcı hata kodu (AUTH_REQUIRED, RATE_LIMITED, ...)
+  normalizedErrorCode String?
+  // Faz 2: sağlayıcı asenkron işliyorsa (video) PROCESSING takibi
+  providerStatusCheckedAt DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   platformContent PlatformContent      @relation(fields: [platformContentId], references: [id], onDelete: Cascade)
   attemptsLog     PublicationAttempt[]
+  socialAccount   SocialAccount?       @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  snapshot        PublicationSnapshot?
 
   @@index([contentId])
   @@index([status])
+  @@index([socialAccountId])
+}
+
+// Faz 2 — yayın anındaki değişmez anlık görüntü (§40):
+// caption/hashtag/CTA/medya varyantı/içerik sürümü/kural sürümü/hesap/provider.
+// Sonradan içerik düzenlense bile yayınlanan neyse odur; denetim bu kayıttan yapılır.
+model PublicationSnapshot {
+  id                  String   @id @default(cuid())
+  publicationId       String   @unique
+  provider            String
+  contentType         String
+  caption             String   @default("")
+  hashtags            String   @default("")
+  cta                 String?
+  firstComment        String?
+  mediaKind           String? // IMAGE | VIDEO
+  mediaStorageKey     String?
+  mediaUrl            String?
+  mediaWidth          Int?
+  mediaHeight         Int?
+  contentVersion      Int      @default(1)
+  platformRuleVersion Int?
+  accountHandle       String?
+  accountExternalId   String?
+  createdAt           DateTime @default(now())
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId])
 }
 
 model PublicationAttempt {
@@ -535,6 +576,11 @@ model PublicationAttempt {
   providerCode    String? // ör. "OAuthException 190"
   providerMessage String?
   friendlyMessage String? // Türkçe, kullanıcıya gösterilen
+  // Faz 2: normalleştirilmiş kod (AUTH_REQUIRED | TOKEN_EXPIRED | PERMISSION_DENIED |
+  // MEDIA_INVALID | CAPTION_INVALID | RATE_LIMITED | ACCOUNT_RESTRICTED |
+  // PROVIDER_TEMPORARY_ERROR | UNKNOWN_PROVIDER_ERROR)
+  normalizedCode  String?
+  retryable       Boolean?
   actionLabel     String? // ör. "Hesabı Yeniden Bağla"
   actionRoute     String?
   durationMs      Int?

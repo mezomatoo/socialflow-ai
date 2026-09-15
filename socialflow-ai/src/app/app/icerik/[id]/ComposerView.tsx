@@ -144,6 +144,34 @@ function safeParse(s: string) {
 }
 
 /* ------------------------------------------------------------------ view */
+export interface PublicationHistoryEntry {
+  status: string;
+  attempts: number;
+  lastError: string | null;
+  normalizedErrorCode: string | null;
+  publishedAt: string | null;
+  permalink: string | null;
+  providerPostId: string | null;
+  demoMode: boolean;
+  snapshot: {
+    caption: string;
+    contentVersion: number;
+    platformRuleVersion: number | null;
+    accountHandle: string | null;
+    mediaKind: string | null;
+    createdAt: string;
+  } | null;
+  attemptsLog: {
+    attempt: number;
+    ok: boolean;
+    providerCode: string | null;
+    normalizedCode: string | null;
+    friendlyMessage: string | null;
+    durationMs: number | null;
+    createdAt: string;
+  }[];
+}
+
 export function ComposerView({
   content: initial,
   accounts,
@@ -151,7 +179,8 @@ export function ComposerView({
   timezone,
   demoMode,
   role,
-  modules
+  modules,
+  publicationHistory = {}
 }: {
   content: any;
   accounts: Account[];
@@ -160,6 +189,7 @@ export function ComposerView({
   demoMode: boolean;
   role: string;
   modules?: Record<string, { enabled: boolean; phase: number; label: string; notice: string }>;
+  publicationHistory?: Record<string, PublicationHistoryEntry>;
 }) {
   // Faz kapıları (§3): Faz 2+ modülleri çalışıyormuş gibi GÖSTERİLMEZ.
   const publishingEnabled = modules?.socialPublishing?.enabled ?? false;
@@ -544,9 +574,9 @@ export function ComposerView({
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-2.5 text-[12.5px] text-ink">
           <Icon name="info" size={15} className="text-info" />
           <span>
-            <strong>Faz 1 — </strong>
+            <strong>Yayınlama kapalı — </strong>
             {modules?.socialPublishing?.notice ??
-              'Gerçek sosyal medya yayını Faz 2’de etkinleşecek. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
+              'Gerçek sosyal medya yayını bu kurulumda kapalı. İçeriklerinizi hazırlayıp taslak olarak saklayabilirsiniz.'}
           </span>
         </div>
       )}
@@ -584,7 +614,7 @@ export function ComposerView({
             {preflight.headline}
             {preflight.phase1Mode && (preflight.publishingPending ?? 0) > 0 && (
               <span className="ml-1 text-ink-muted">
-                · Yayın koşulları ({preflight.publishingPending}) Faz 2’de etkinleşecek.
+                · Yayın koşulları ({preflight.publishingPending}) tamamlanınca yayına hazır olacak.
               </span>
             )}
           </p>
@@ -700,6 +730,7 @@ export function ComposerView({
                 content={content}
                 masterMedia={masterMedia}
                 accounts={accounts.filter((a) => a.platform === t.platform)}
+                history={publicationHistory[t.id] ?? null}
                 preflightTarget={preflight?.targets.find((p) => p.platformContentId === t.id) ?? null}
                 included={Boolean(included[t.id])}
                 onToggleInclude={(v) => setIncluded((prev) => ({ ...prev, [t.id]: v }))}
@@ -819,6 +850,7 @@ function TargetCard({
   content,
   masterMedia,
   accounts,
+  history,
   preflightTarget,
   included,
   onToggleInclude,
@@ -834,6 +866,7 @@ function TargetCard({
   content: ContentDetail;
   masterMedia: MediaAsset | null;
   accounts: Account[];
+  history: PublicationHistoryEntry | null;
   preflightTarget: PreflightTarget | null;
   included: boolean;
   onToggleInclude: (v: boolean) => void;
@@ -977,8 +1010,39 @@ function TargetCard({
           )}
           {t.permalink && (
             <a href={t.permalink} target="_blank" rel="noreferrer" className="link mt-2 inline-flex items-center gap-1 text-[12px]">
-              <Icon name="globe" size={12} /> Yayınlanan gönderiyi gör
+              <Icon name="globe" size={12} /> Platformda Gör
             </a>
+          )}
+          {history && (history.status === 'PROCESSING' || history.status === 'PUBLISHED' || history.status === 'FAILED') && (
+            <details className="mt-2 rounded-lg border border-line bg-surface-subtle px-3 py-2">
+              <summary className="cursor-pointer select-none text-[12px] font-bold text-ink">
+                Yayın geçmişi — {history.status === 'PUBLISHED' ? 'Yayınlandı' : history.status === 'PROCESSING' ? 'Platformda İşleniyor' : 'Başarısız'}
+                {history.attempts > 1 ? ` (${history.attempts} deneme)` : ''}
+                {history.demoMode ? ' · Demo' : ''}
+              </summary>
+              {history.snapshot && (
+                <div className="mt-2 rounded-md bg-surface px-2.5 py-2 text-[11.5px] text-ink-muted">
+                  <p className="font-bold text-ink-faint">Yayın anlık görüntüsü (§40)</p>
+                  <p>
+                    İçerik sürümü v{history.snapshot.contentVersion}
+                    {history.snapshot.platformRuleVersion ? ` · Kural sürümü v${history.snapshot.platformRuleVersion}` : ''}
+                    {history.snapshot.accountHandle ? ` · Hesap @${history.snapshot.accountHandle}` : ''}
+                  </p>
+                </div>
+              )}
+              <ul className="mt-2 space-y-1.5">
+                {history.attemptsLog.map((a) => (
+                  <li key={a.attempt} className="flex items-start gap-2 text-[11.5px]">
+                    <Badge tone={a.ok ? 'success' : 'danger'}>#{a.attempt}</Badge>
+                    <span className="min-w-0 flex-1 text-ink-muted">
+                      {a.ok ? 'Başarılı' : (a.friendlyMessage ?? 'Başarısız')}
+                      {a.normalizedCode && <span className="ml-1 font-mono text-[10.5px] text-ink-faint">{a.normalizedCode}</span>}
+                      {a.durationMs != null && <span className="ml-1 text-ink-faint">· {a.durationMs} ms</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {/* Ön kontrol satırları */}
@@ -1062,7 +1126,7 @@ function SelectionModal({
       <div className="space-y-3">
         {!accountsEnabled && (
           <p className="rounded-xl border border-info/30 bg-info/10 px-3 py-2 text-[12.5px] text-ink">
-            Hesap bağlama Faz 2’de etkinleşecek. Faz 1’de hedefleri hesap
+            Hesap bağlama bu kurulumda kapalı. Hedefleri hesap
             seçmeden de hazırlayabilirsiniz.
           </p>
         )}
@@ -1072,7 +1136,7 @@ function SelectionModal({
               <PlatformIcon platform={p.code} size={22} rounded="md" />
               <span className="text-[13.5px] font-bold text-ink">{p.name}</span>
               {!accounts.some((a) => a.platform === p.code) && (
-                <Badge tone="warning">{accountsEnabled ? 'Bağlı hesap yok' : 'Hesap bağlama Faz 2’de'}</Badge>
+                <Badge tone="warning">{accountsEnabled ? 'Bağlı hesap yok' : 'Hesap bağlama kapalı'}</Badge>
               )}
             </div>
             <div className="flex flex-wrap gap-2">

@@ -89,7 +89,8 @@ export class TikTokProvider extends OAuth2Provider {
         payload,
         code: init.data?.error?.code ?? null,
         message: init.data?.error?.message ?? init.data?.message ?? init.error,
-        httpStatus: init.status
+        httpStatus: init.status,
+        retryAfter: init.retryAfter ?? null
       });
     }
 
@@ -100,6 +101,8 @@ export class TikTokProvider extends OAuth2Provider {
       externalPostId: publishId,
       permalink: null,
       providerScheduled: false,
+      // Faz 2: TikTok yüklemeyi kabul eder ama yayın asenkron işlenir (§51).
+      processing: !payload.demoMode,
       friendlyMessage: payload.demoMode
         ? 'Demo Modu — TikTok için gerçek video yüklemesi yapılmadı.'
         : 'TikTok videosu işleniyor. Yükleme durumu birkaç dakika içinde güncellenir.'

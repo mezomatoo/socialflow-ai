@@ -6,7 +6,9 @@ import { env } from '../env';
 import { getProvider } from '../social/registry';
 import { fromCipherText, toCipherText } from '../crypto';
 import { notify } from '../services/notifications';
+import { audit } from '../security/audit';
 import { enqueuePublishJob } from '../services/schedulingService';
+import { enqueue } from './queue';
 
 /**
  * İş yürütücüleri (job handlers) + kuyruk işçisi.
@@ -23,12 +25,15 @@ export async function processJob(job: any): Promise<Record<string, unknown> | vo
       catch { throw new Error('Gelen kutusu olayı işlenemedi. Kaynak ve hesap yetkilerini kontrol edin.'); }
     case 'PublishContentJob':
       return handlePublishContentJob(job, payload);
-    case 'MediaProcessingJob':
+    case 'SyncPublicationStatusJob':
+      return handleSyncPublicationStatusJob(job, payload);
+    case 'CheckSocialAccountHealthJob':
+      return handleAccountHealthJob(job, payload);
+    case 'TokenRefreshJob':
+      return handleTokenRefreshJob(job, payload);    case 'MediaProcessingJob':
       return handleMediaProcessingJob(job, payload);
     case 'AnalyticsSyncJob':
       return handleAnalyticsSyncJob(job, payload);
-    case 'TokenRefreshJob':
-      return handleTokenRefreshJob(job, payload);
     default:
       throw new Error(`Bilinmeyen iş türü: ${job.type}`);
   }
@@ -62,9 +67,174 @@ async function handlePublishContentJob(job: any, payload: any) {
   });
 
   if (!result.ok && result.retryable) {
-    throw new Error(result.message); // kuyruk tekrar deneyecek
+    throw new PublishRetryError(result.message, result.retryAfterMs ?? null); // kuyruk tekrar deneyecek
   }
   return { ok: result.ok, status: result.status, contentId };
+}
+
+/**
+ * Sağlayıcı tekrar denemeye izin veriyorsa (429/5xx) fırlatılır.
+ * Retry-After önerisi varsa kuyruk kesin olarak o kadar bekler (§78).
+ */
+class PublishRetryError extends Error {
+  retryAfterMs: number | null;
+  constructor(message: string, retryAfterMs: number | null) {
+    super(message);
+    this.name = 'PublishRetryError';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/**
+ * Faz 2 (§51): sağlayıcı isteği kabul edip PLATFORM TARAFINDA işliyorsa
+ * (ör. video transcode) Publication PROCESSING kalır. Bu iş, sağlayıcıdan
+ * son durumu çekerek PUBLISHED/FAILED'e çevirir. Kendini yeniden planlar;
+ * terminal duruma ulaşınca veya kontrol sınırına (15 kontrol, üstel artan
+ * aralıkla) gelince durur — sonsuz döngü yoktur (§79 ruhunda).
+ */
+async function handleSyncPublicationStatusJob(_job: any, payload: any) {
+  const publicationId: string = payload.publicationId;
+  const check: number = Number(payload.check ?? 1);
+  const MAX_CHECKS = 15;
+
+  const publication = await prisma.publication.findUnique({
+    where: { id: publicationId },
+    include: {
+      platformContent: {
+        include: {
+          content: { select: { workspaceId: true, title: true } },
+          socialAccount: { include: { token: true } }
+        }
+      }
+    }
+  });
+  if (!publication) return;
+  if (publication.status !== 'PROCESSING') return; // zaten terminal durumda
+
+  const pc = publication.platformContent;
+  const workspaceId = pc.content.workspaceId;
+  const token = pc.socialAccount?.token ? fromCipherText(pc.socialAccount.token.accessTokenEnc) : null;
+  const provider = getProvider(pc.platform);
+
+  let status: 'PUBLISHED' | 'PENDING' | 'PROCESSING' | 'FAILED' | 'UNKNOWN' = 'UNKNOWN';
+  let permalink: string | null = null;
+  let message: string | null = null;
+
+  try {
+    if (!publication.providerPostId) throw new Error('Sağlayıcı gönderi kimliği yok.');
+    const result = await provider.getPostStatus(publication.providerPostId, token ?? '');
+    status = result.status;
+    permalink = result.permalink ?? null;
+    message = result.message ?? null;
+  } catch (err) {
+    message = err instanceof Error ? err.message : String(err);
+    status = 'UNKNOWN';
+  }
+
+  await prisma.publication.update({ where: { id: publication.id }, data: { providerStatusCheckedAt: new Date() } });
+
+  if (status === 'PUBLISHED') {
+    await prisma.publication.update({
+      where: { id: publication.id },
+      data: {
+        status: 'PUBLISHED',
+        permalink: permalink ?? publication.permalink,
+        publishedAt: publication.publishedAt ?? new Date(),
+        lastError: null
+      }
+    });
+    await prisma.platformContent.update({
+      where: { id: pc.id },
+      data: { status: 'PUBLISHED', permalink: permalink ?? pc.permalink, publishedAt: new Date(), lastError: null, updatedAt: new Date() }
+    });
+    await notify(workspaceId, {
+      type: 'PUBLISHED',
+      severity: 'SUCCESS',
+      title: 'Platform işleme tamamlandı',
+      message: `${pc.content.title || 'İçerik'} platformda yayına alındı.`,
+      contentId: pc.contentId,
+      actionLabel: permalink ? 'Gönderiyi Görüntüle' : 'Yayınlananlar',
+      actionRoute: permalink ?? '/app/icerik/yayinlananlar'
+    });
+    await audit({ workspaceId, action: 'publication.success', entityType: 'PlatformContent', entityId: pc.id, metadata: { syncCheck: check } });
+    await rollupContentStatus(pc.contentId);
+    return { status: 'PUBLISHED', check };
+  }
+
+  if (status === 'FAILED') {
+    const friendly = 'Platform, içeriği işlerken hata bildirdi. İçeriği yeniden deneyebilirsiniz.';
+    await prisma.publication.update({
+      where: { id: publication.id },
+      data: { status: 'FAILED', lastError: friendly, normalizedErrorCode: 'PROVIDER_TEMPORARY_ERROR' }
+    });
+    await prisma.platformContent.update({
+      where: { id: pc.id },
+      data: { status: 'FAILED', lastError: friendly, updatedAt: new Date() }
+    });
+    await notify(workspaceId, {
+      type: 'PUBLISH_FAILED',
+      severity: 'ERROR',
+      title: 'Platform işleme tamamlayamadı',
+      message: message ? `${friendly} (Detay: ${String(message).slice(0, 160)})` : friendly,
+      contentId: pc.contentId,
+      actionLabel: 'Yayınlananlar',
+      actionRoute: '/app/icerik/yayinlananlar'
+    });
+    await audit({ workspaceId, action: 'publication.failed', entityType: 'PlatformContent', entityId: pc.id, metadata: { syncCheck: check, providerMessage: message } });
+    await rollupContentStatus(pc.contentId);
+    return { status: 'FAILED', check };
+  }
+
+  // Hâlâ işleniyor veya durum bilinmiyor → sınır içinde tekrar kontrol et
+  if (check < MAX_CHECKS) {
+    const backoffMs = Math.min(120_000 * Math.pow(2, check - 1), 30 * 60_000);
+    await enqueue({
+      type: 'SyncPublicationStatusJob',
+      idempotencyKey: `pubsync:${publication.id}:${check + 1}`,
+      runAt: new Date(Date.now() + backoffMs),
+      workspaceId,
+      maxAttempts: 1,
+      payload: { publicationId: publication.id, check: check + 1 }
+    });
+    return { status, check, nextCheck: check + 1 };
+  }
+
+  // Kontrol sınırı aşıldı → dürüstçe başarısız işaretle (sonsuz bekleme yok)
+  const timeoutMessage = 'Platform, içerik işleme işlemini beklenen sürede tamamlamadı. Lütfen platformda gönderinin durumunu kontrol edin.';
+  await prisma.publication.update({
+    where: { id: publication.id },
+    data: { status: 'FAILED', lastError: timeoutMessage, normalizedErrorCode: 'UNKNOWN_PROVIDER_ERROR' }
+  });
+  await prisma.platformContent.update({
+    where: { id: pc.id },
+    data: { status: 'FAILED', lastError: timeoutMessage, updatedAt: new Date() }
+  });
+  await notify(workspaceId, {
+    type: 'PUBLISH_FAILED',
+    severity: 'WARNING',
+    title: 'Yayın durumu doğrulanamadı',
+    message: timeoutMessage,
+    contentId: pc.contentId,
+    actionLabel: 'Yayınlananlar',
+    actionRoute: '/app/icerik/yayinlananlar'
+  });
+  await rollupContentStatus(pc.contentId);
+  return { status: 'TIMEOUT', check };
+}
+
+/**
+ * Faz 2 (§28): CheckSocialAccountHealthJob — token geçerliliği, profil
+ * erişimi ve yetenek envanterini denetler; sorun bulursa hesabı
+ * NEEDS_REAUTH'e çekip Türkçe bildirim üretir (§29: hesap asla sessizce
+ * silinmez).
+ */
+async function handleAccountHealthJob(_job: any, payload: any) {
+  const { checkAccountHealth, checkAllAccountHealth } = await import('../social/accountHealth');
+  if (payload.accountId) {
+    const result = await checkAccountHealth(String(payload.accountId), { notifyOnFailure: true });
+    return { accountId: result.accountId, ok: result.ok, status: result.connectionStatus };
+  }
+  return checkAllAccountHealth(payload.workspaceId ? String(payload.workspaceId) : undefined);
 }
 
 async function handleMediaProcessingJob(_job: any, payload: any) {
@@ -227,6 +397,8 @@ export function startQueueWorker() {
     try {
       // Zamanlanmış içerikler için iş kuyruğa alındı mı?
       await ensureDueSchedules();
+      // Günlük bakım: token yenileme + hesap sağlığı (idempotent, günde 1 kez)
+      await ensureDailyMaintenance();
 
       for (let i = 0; i < env.queue.concurrency; i++) {
         const job = await claimNextJob(workerId);
@@ -236,7 +408,8 @@ export function startQueueWorker() {
           await completeJob(job.id, (result as Record<string, unknown>) ?? undefined);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          await failJob(job.id, message);
+          const retryAfterMs = err instanceof PublishRetryError ? err.retryAfterMs : null;
+          await failJob(job.id, message, retryAfterMs ?? 60_000, { exact: retryAfterMs != null });
         }
       }
     } catch (err) {
@@ -255,6 +428,27 @@ export function stopQueueWorker() {
   if (timer) clearInterval(timer);
   timer = null;
   workerStarted = false;
+}
+
+/**
+ * Faz 2 (§28): her gün bir kez TokenRefreshJob + CheckSocialAccountHealthJob
+ * planlar. IdempotencyKey güne bağlıdır; çift iş oluşmaz. Tarayıcı kapalıyken
+ * de sunucu tarafında çalışır (§46 bulut planlama ilkesi).
+ */
+async function ensureDailyMaintenance() {
+  const today = new Date().toISOString().slice(0, 10);
+  await enqueue({
+    type: 'TokenRefreshJob',
+    idempotencyKey: `tokenrefresh:daily:${today}`,
+    maxAttempts: 1,
+    payload: {}
+  }).catch(() => undefined);
+  await enqueue({
+    type: 'CheckSocialAccountHealthJob',
+    idempotencyKey: `health:daily:${today}`,
+    maxAttempts: 1,
+    payload: {}
+  }).catch(() => undefined);
 }
 
 /** Vakti gelen Schedule kayıtları için PublishContentJob oluşturur. */

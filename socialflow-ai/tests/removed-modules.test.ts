@@ -26,9 +26,13 @@ it('Gelen Kutusu artık CRM sorgusu/linki taşımaz; diğer ana menüler korunur
   for (const file of ['src/lib/inbox/service.ts', 'src/lib/inbox/contracts.ts', 'src/app/app/gelen-kutusu/InboxView.tsx']) {
     assert.doesNotMatch(readFileSync(file, 'utf8'), /crmContactId|contactConversationLink|\/app\/musteriler/);
   }
-  for (const href of ['/app/gelen-kutusu', '/app/reklamlar', '/app/hesaplar', '/app/icerik/yeni', '/app/marka-kiti']) {
+  for (const href of ['/app/gelen-kutusu', '/app/reklamlar', '/app/hesaplar', '/app/icerik/yeni']) {
     assert.ok(ALL_NAV_ITEMS.some(item => item.href === href), href);
   }
+  // Marka Kiti henüz etkin değil: müşteri menüsünde gösterilmez ama yolu ve
+  // dürüst bilgilendirme sayfası korunur (route preservation).
+  assert.ok(!ALL_NAV_ITEMS.some(item => item.href === '/app/marka-kiti'), 'marka-kiti menüde olmamalı');
+  assert.ok(existsSync('src/app/app/marka-kiti/page.tsx'));
 });
 it('uygulanmış migration geçmişi veri kaybetmemek için korunur', () => {
   for (const name of ['202609150005_product_catalog', '202609150006_crm_leads']) {

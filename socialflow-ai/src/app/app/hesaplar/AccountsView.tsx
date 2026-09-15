@@ -6,6 +6,7 @@ import { PlatformIcon } from '@/components/ui/PlatformIcon';
 import { Badge, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toaster';
 import { api, ApiError } from '@/lib/client/api';
+import { formatRelative } from '@/lib/format';
 import { PLATFORM_META, type PlatformCode } from '@/lib/platforms/platforms';
 
 interface AccountItem {
@@ -23,6 +24,7 @@ interface AccountItem {
   brandColor: string | null;
   externalId: string | null;
   tokenExpiresAt: string | null;
+  lastSyncedAt: string | null;
 }
 
 const STATUS: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
@@ -83,6 +85,37 @@ export function AccountsView({
       }
     } catch (e) {
       toast.error('Bağlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function runHealthCheck(a: AccountItem) {
+    setBusyId(a.id);
+    try {
+      const res = await api.post<{ ok: boolean; connectionStatus: string; checks: { label: string; level: 'OK' | 'WARNING' | 'ERROR'; message: string }[] }>(
+        `/api/accounts/${a.id}/health`
+      );
+      const problems = res.checks.filter((c) => c.level === 'ERROR');
+      if (res.ok) {
+        toast.success('Bağlantı sağlıklı', problems.length ? problems[0].message : `${res.checks.length} kontrol tamamlandı, sorun bulunamadı.`);
+      } else {
+        toast.error('Bağlantı sorunu bulundu', problems[0]?.message ?? 'Bağlantı doğrulanamadı.');
+      }
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === a.id
+            ? {
+                ...x,
+                connectionStatus: res.connectionStatus,
+                lastSyncedAt: new Date().toISOString(),
+                lastError: res.ok ? null : problems[0]?.message ?? x.lastError
+              }
+            : x
+        )
+      );
+    } catch (e) {
+      toast.error('Sağlık denetimi başarısız', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
       setBusyId(null);
     }
@@ -210,6 +243,9 @@ export function AccountsView({
                           {a.lastError && (
                             <p className="mt-1.5 text-[11.5px] text-danger">{a.lastError}</p>
                           )}
+                          {a.lastSyncedAt && (
+                            <p className="mt-1 text-[11px] text-ink-faint">Son eşitleme: {formatRelative(a.lastSyncedAt)}</p>
+                          )}
                         </div>
                       </div>
 
@@ -228,6 +264,9 @@ export function AccountsView({
                           ))}
                         </select>
                         <div className="ml-auto flex items-center gap-1">
+                          <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => runHealthCheck(a)} title="Bağlantı sağlığını denetle">
+                            <Icon name="shield" size={13} /> Bağlantıyı Test Et
+                          </button>
                           {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
                               <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
@@ -314,7 +353,8 @@ function AddAccountModal({
         brandName: brand?.name ?? null,
         brandColor: null,
         externalId: null,
-        tokenExpiresAt: null
+        tokenExpiresAt: null,
+        lastSyncedAt: null
       });
       toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
     } catch (e) {

@@ -204,7 +204,11 @@ describe('Platform kuralı ihlali (§57) — engelleyici hata, kesme yok', () =>
     assert.ok(tooLong, 'sınır aşımı CAPTION_TOO_LONG olarak raporlanmalı');
     assert.equal(tooLong!.level, 'ERROR');
     assert.equal(report.blocking, true, 'içerik kaynaklı hata bloklamalı');
-    assert.ok(report.headline.includes('düzeltme'), 'başlık kullanıcıya yol göstermeli');
+    // Faz moduna göre başlık "düzeltme gerekiyor" ya da "sorun var" der; ikisi de yol gösterir.
+    assert.ok(
+      report.headline.includes('düzeltme') || report.headline.includes('sorun'),
+      'başlık kullanıcıya yol göstermeli'
+    );
   });
 
   it('metin uzunluğu kural sınırına göre raporlanır, kesilmez', async () => {

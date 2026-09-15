@@ -39,6 +39,8 @@ export interface PublishTargetResult {
   message: string;
   action?: { label: string; route: string } | null;
   retryable: boolean;
+  /** Sağlayıcı Retry-After önerisi (ms) — kuyruk yeniden denemede bunu kullanır. */
+  retryAfterMs?: number | null;
   demoMode: boolean;
   permalink?: string | null;
 }
@@ -112,6 +114,7 @@ export async function publishPlatformContent(
         idempotencyKey,
         platformContentId,
         contentId: pc.contentId,
+        socialAccountId: pc.socialAccountId ?? null,
         status: 'PENDING',
         demoMode: ctx.demoMode,
         maxAttempts: 3
@@ -130,10 +133,22 @@ export async function publishPlatformContent(
     where: { id: platformContentId },
     data: { status: 'PUBLISHING', lastError: null, updatedAt: new Date() }
   });
-  await prisma.publication.update({ where: { id: publication.id }, data: { status: 'IN_PROGRESS' } });
+  await prisma.publication.update({
+    where: { id: publication.id },
+    data: { status: 'IN_PROGRESS', socialAccountId: pc.socialAccountId ?? null, normalizedErrorCode: null }
+  });
 
   // --- Payload hazırla ------------------------------------------------------
   const payload = await buildPayload(pc, rule, ctx, publication.idempotencyKey);
+
+  // --- Değişmez yayın anlık görüntüsü (§40) --------------------------------
+  // Sağlayıcı çağrısından ÖNCE yazılır: yayınlanan içerik sonradan
+  // düzenlense bile neyin yayınlandığı bu kayıttan kanıtlanır.
+  await prisma.publicationSnapshot.upsert({
+    where: { publicationId: publication.id },
+    create: snapshotData(publication.id, pc, rule, payload),
+    update: snapshotData(publication.id, pc, rule, payload)
+  });
 
   // --- Token (yalnızca gerçek modda) ---------------------------------------
   if (!ctx.demoMode) {
@@ -191,6 +206,10 @@ export async function publishPlatformContent(
   const durationMs = Date.now() - started;
 
   // --- Deneme kaydı ---------------------------------------------------------
+  const normalizedCode =
+    result.normalizedCode ??
+    (result.ok ? null : toFriendlyError({ code: result.providerCode, message: result.providerMessage, httpStatus: result.httpStatus }).normalizedCode);
+
   await prisma.publicationAttempt.create({
     data: {
       publicationId: publication.id,
@@ -200,11 +219,67 @@ export async function publishPlatformContent(
       providerCode: result.providerCode ?? null,
       providerMessage: result.providerMessage ? String(result.providerMessage).slice(0, 800) : null,
       friendlyMessage: result.friendlyMessage ?? null,
+      normalizedCode: normalizedCode ?? null,
+      retryable: result.ok ? null : Boolean(result.retryable),
       actionLabel: result.action?.label ?? null,
       actionRoute: result.action?.route ?? null,
       durationMs
     }
   });
+
+  // --- Faz 2: sağlayıcı platform tarafında işliyor (§51) --------------------
+  // Kuyrukta/kabulde PUBLISHED DENİLMEZ (§42); SyncPublicationStatusJob
+  // sağlayıcıdan gelen son durumu sonra doğrular.
+  if (result.ok && result.processing) {
+    await prisma.publication.update({
+      where: { id: publication.id },
+      data: {
+        status: 'PROCESSING',
+        providerPostId: result.externalPostId ?? null,
+        permalink: result.permalink ?? null,
+        attempts: { increment: 1 },
+        demoMode: result.demoMode ?? ctx.demoMode,
+        lastError: null,
+        providerStatusCheckedAt: new Date()
+      }
+    });
+    await prisma.platformContent.update({
+      where: { id: platformContentId },
+      data: { status: 'PROCESSING', externalPostId: result.externalPostId ?? null, lastError: null, updatedAt: new Date() }
+    });
+    const { enqueue } = await import('../queue/queue');
+    await enqueue({
+      type: 'SyncPublicationStatusJob',
+      idempotencyKey: `pubsync:${publication.id}:1`,
+      runAt: new Date(Date.now() + 120_000),
+      workspaceId: ctx.workspaceId,
+      maxAttempts: 1,
+      payload: { publicationId: publication.id, check: 1 }
+    });
+    await notify(ctx.workspaceId, {
+      type: 'PUBLISHING',
+      severity: 'INFO',
+      title: `${PLATFORM_META[platform]?.name ?? platform} platformda işleniyor`,
+      message: `${rule.label} kabul edildi; platform içeriği işliyor. Sonuç otomatik olarak doğrulanacak.`,
+      contentId: pc.contentId,
+      userId: ctx.userId ?? null,
+      actionLabel: 'Yayınlananlar',
+      actionRoute: '/app/icerik/yayinlananlar'
+    });
+    await rollupContentStatus(pc.contentId);
+    return {
+      platformContentId,
+      platform,
+      contentType,
+      label: rule.label,
+      ok: true,
+      status: 'PROCESSING',
+      message: result.friendlyMessage ?? 'İçerik kabul edildi; platform tarafından işleniyor.',
+      retryable: false,
+      demoMode: Boolean(result.demoMode ?? ctx.demoMode),
+      permalink: result.permalink ?? null
+    };
+  }
 
   if (result.ok) {
     await prisma.publication.update({
@@ -283,7 +358,8 @@ export async function publishPlatformContent(
     data: {
       status: 'FAILED',
       attempts: { increment: 1 },
-      lastError: friendlyMessage.slice(0, 500)
+      lastError: friendlyMessage.slice(0, 500),
+      normalizedErrorCode: normalizedCode ?? null
     }
   });
 
@@ -329,6 +405,7 @@ export async function publishPlatformContent(
     message: friendlyMessage,
     action: result.action ?? null,
     retryable: Boolean(result.retryable),
+    retryAfterMs: result.retryAfterMs ?? null,
     demoMode: ctx.demoMode
   };
 }
@@ -518,6 +595,29 @@ async function buildPayload(pc: any, rule: any, ctx: PublishContext, idempotency
   };
 }
 
+/** Yayın anlığına ait değişmez görüntü verisi (§40). */
+function snapshotData(publicationId: string, pc: any, rule: any, payload: PublishPayload) {
+  const media = payload.media[0];
+  return {
+    publicationId,
+    provider: pc.platform as string,
+    contentType: pc.contentType as string,
+    caption: payload.caption ?? '',
+    hashtags: String(pc.hashtags ?? ''),
+    cta: payload.cta ?? null,
+    firstComment: payload.firstComment ?? null,
+    mediaKind: media?.kind ?? null,
+    mediaStorageKey: media?.storageKey ?? null,
+    mediaUrl: media?.url ?? null,
+    mediaWidth: media?.width ?? null,
+    mediaHeight: media?.height ?? null,
+    contentVersion: pc.content?.version ?? 1,
+    platformRuleVersion: rule.version ?? null,
+    accountHandle: payload.account.handle || null,
+    accountExternalId: payload.account.externalId ?? null
+  };
+}
+
 async function absoluteMediaUrl(storageKey: string, fallback: string | null): Promise<string> {
   const base = process.env.APP_URL ?? 'http://localhost:3000';
   const relative = storage().url(storageKey);
@@ -539,7 +639,7 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
   const counts = {
     published: children.filter((c) => c.status === 'PUBLISHED').length,
     failed: children.filter((c) => c.status === 'FAILED').length,
-    publishing: children.filter((c) => c.status === 'PUBLISHING').length,
+    publishing: children.filter((c) => c.status === 'PUBLISHING' || c.status === 'PROCESSING').length,
     scheduled: children.filter((c) => c.status === 'SCHEDULED').length,
     approval: children.filter((c) => c.status === 'APPROVAL_PENDING').length,
     draft: children.filter((c) => c.status === 'DRAFT').length
@@ -554,6 +654,11 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
   else if (counts.approval > 0) status = 'APPROVAL_PENDING';
   else if (counts.scheduled > 0) status = 'SCHEDULED';
 
+  const previous = await prisma.content.findUnique({
+    where: { id: contentId },
+    select: { status: true, workspaceId: true, title: true }
+  });
+
   await prisma.content.update({
     where: { id: contentId },
     data: {
@@ -561,5 +666,19 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
       publishedAt: status === 'PUBLISHED' || status === 'PARTIALLY_PUBLISHED' ? new Date() : null
     }
   });
+
+  // Kısmi başarı: içerik-bazlı tek bildirim (durum değişiminde bir kez) — §56
+  if (status === 'PARTIALLY_PUBLISHED' && previous && previous.status !== 'PARTIALLY_PUBLISHED') {
+    const { notify } = await import('../services/notifications');
+    await notify(previous.workspaceId, {
+      type: 'PUBLICATION_PARTIAL_SUCCESS',
+      title: 'Yayın kısmen tamamlandı',
+      message: `"${previous.title}" kısmen yayınlandı: ${counts.published} platformda yayınlandı, ${counts.failed + counts.scheduled} platform başarısız/bekliyor.`,
+      severity: 'WARNING',
+      contentId,
+      actionLabel: 'İçeriği Gör',
+      actionRoute: `/app/icerik/${contentId}`
+    });
+  }
   return status;
 }

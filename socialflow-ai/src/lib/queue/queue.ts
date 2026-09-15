@@ -103,16 +103,24 @@ export async function completeJob(id: string, result?: Record<string, unknown>) 
   });
 }
 
-export async function failJob(id: string, error: string, retryDelayMs = 60_000) {
+export async function failJob(
+  id: string,
+  error: string,
+  retryDelayMs = 60_000,
+  opts: { exact?: boolean } = {}
+) {
   const job = await prisma.job.findUnique({ where: { id } });
   if (!job) return;
   const willRetry = job.attempts < job.maxAttempts;
+  // exact: sağlayıcının Retry-After önerisi gibi kesin bir gecikmedir;
+  // attempts ile çarpılmaz (varsayılan doğrusal backoff ayrıdır).
+  const delay = opts.exact ? retryDelayMs : retryDelayMs * job.attempts;
   await prisma.job.update({
     where: { id },
     data: {
       status: willRetry ? 'QUEUED' : 'FAILED',
       lastError: error.slice(0, 500),
-      runAt: willRetry ? new Date(Date.now() + retryDelayMs * job.attempts) : job.runAt,
+      runAt: willRetry ? new Date(Date.now() + delay) : job.runAt,
       lockedBy: null,
       lockedAt: null
     }

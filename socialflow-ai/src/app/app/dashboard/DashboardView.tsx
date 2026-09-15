@@ -134,7 +134,7 @@ export function DashboardView({ stats, publishingStats, onboarding, brands, acco
         <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-[12.5px] text-ink">
           <Icon name="info" size={16} className="text-info shrink-0" />
           <span>
-            <strong>Faz 1 — Üretim ve hazırlık.</strong> Sosyal medyaya gerçek yayın Faz 2’de etkinleşecek. Şu anda
+            <strong>Yayınlama bu kurulumda kapalı.</strong> Şu anda
             içeriklerinizi hazırlayabilir, platforma özel metin ve görsellerini üretebilir, taslak olarak saklayabilirsiniz.
           </span>
         </div>

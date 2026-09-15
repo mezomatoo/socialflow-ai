@@ -92,7 +92,8 @@ export class PinterestProvider extends OAuth2Provider {
         payload,
         code: res.data?.code ? String(res.data.code) : null,
         message: res.data?.message ?? res.error,
-        httpStatus: res.status
+        httpStatus: res.status,
+        retryAfter: res.retryAfter ?? null
       });
     }
     const id = String(res.data?.id ?? '');

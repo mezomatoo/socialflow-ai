@@ -18,7 +18,7 @@ export default async function PublishedPage() {
   const ws = session.user.workspaceId;
 
   const [items, brands] = await Promise.all([
-    fetchContentList(ws, ['PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED']),
+    fetchContentList(ws, ['PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED', 'PROCESSING', 'PUBLISHING']),
     fetchBrandOptions(ws)
   ]);
 
