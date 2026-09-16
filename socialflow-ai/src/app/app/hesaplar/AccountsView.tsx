@@ -319,7 +319,7 @@ export function AccountsView({
                           <div className="flex items-center gap-2">
                             <p className="truncate text-[14px] font-bold text-ink">{a.displayName}</p>
                             {a.demoAccount && <Badge tone="warning">Demo</Badge>}
-                            {a.publishMode === 'MANUAL' && <Badge tone="neutral">API'siz Yayın</Badge>}
+                            {a.publishMode === 'MANUAL' && <Badge tone="neutral">API&apos;siz Yayın</Badge>}
                           </div>
                           <p className="truncate text-[12.5px] text-ink-muted">
                             @{a.handle.replace(/^@/, '')} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
@@ -364,7 +364,7 @@ export function AccountsView({
                           title="Otomatik: resmî API/OAuth ile yayınlanır (kimlik gerekir). Manuel: API'siz; içeriği kopyalar, platformda kendiniz paylaşır ve onaylarsınız."
                         >
                           <option value="AUTO">Yayın: Otomatik (API)</option>
-                          <option value="MANUAL">Yayın: Manuel (API'siz)</option>
+                          <option value="MANUAL">Yayın: Manuel (API&apos;siz)</option>
                         </select>
                         <div className="ml-auto flex items-center gap-1">
                           <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => runHealthCheck(a)} title="Bağlantı sağlığını denetle">
