@@ -47,13 +47,15 @@ export function AccountsView({
   brands,
   platforms,
   demoMode,
-  connectionResult
+  connectionResult,
+  connectionResultCode
 }: {
   items: AccountItem[];
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
   connectionResult?: string | null;
+  connectionResultCode?: string | null;
 }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
@@ -110,6 +112,20 @@ export function AccountsView({
     }
   }
 
+  /** OAuth tamamlanamadığında bilinçli simülasyon bağlantısı (içerik akışı kesilmez). */
+  async function simulateConnect(a: AccountItem) {
+    setBusyId(a.id);
+    try {
+      const res = await api.post<{ demo: boolean; message?: string }>(`/api/accounts/${a.id}/connect?simulate=1`);
+      setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, connectionStatus: 'ACTIVE', lastError: null } : x)));
+      toast.success('Simülasyon bağlantısı tamamlandı', res.message ?? `${a.displayName} artık kullanılabilir.`);
+    } catch (e) {
+      toast.error('Bağlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function runHealthCheck(a: AccountItem) {
     setBusyId(a.id);
     try {
@@ -158,7 +174,7 @@ export function AccountsView({
   }
 
   async function remove(a: AccountItem) {
-    if (!window.confirm(`${a.displayName} (@${a.handle}) bağlantısı kaldırılsın mı?`)) return;
+    if (!window.confirm(`${a.displayName} (@${a.handle.replace(/^@/, '')}) bağlantısı kaldırılsın mı?`)) return;
     setBusyId(a.id);
     try {
       await api.del(`/api/accounts/${a.id}`);
@@ -197,7 +213,26 @@ export function AccountsView({
         </span>
       </div>
 
-      {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
+      {connectionResult && (
+        <div
+          role="status"
+          className={`mb-4 rounded-xl border p-4 text-sm ${
+            connectionResultCode === 'connected'
+              ? 'border-success/30 bg-success/10 text-ink'
+              : 'border-warning/40 bg-warning/10 text-ink'
+          }`}
+        >
+          <p className="font-semibold">{connectionResult}</p>
+          {connectionResultCode && connectionResultCode !== 'connected' && connectionResultCode !== 'denied' && (
+            <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-90">
+              Bu adım, sunucunun platforma doğrudan erişebildiği gerçek bir alan adında otomatik tamamlanır. Bu
+              önizleme ortamında dış ağ erişimi olmadığından, beklemek istemiyorsanız aşağıdaki hesap kartlarında
+              yer alan <strong>“Simülasyon Olarak Bağla”</strong> düğmesini kullanabilirsiniz; içerik planlama ve
+              üretimi aynen çalışır.
+            </p>
+          )}
+        </div>
+      )}
 
       {demoMode && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
@@ -261,7 +296,7 @@ export function AccountsView({
                             {a.demoAccount && <Badge tone="warning">Demo</Badge>}
                           </div>
                           <p className="truncate text-[12.5px] text-ink-muted">
-                            @{a.handle} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
+                            @{a.handle.replace(/^@/, '')} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
                           </p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
                             <Badge tone={st.tone}>{st.label}</Badge>
@@ -302,6 +337,16 @@ export function AccountsView({
                           {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
                               <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
+                            </button>
+                          )}
+                          {a.connectionStatus !== 'ACTIVE' && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              disabled={busyId === a.id}
+                              onClick={() => simulateConnect(a)}
+                              title="OAuth onayını beklemeden simülasyon olarak bağla"
+                            >
+                              <Icon name="zap" size={13} /> Simülasyon Olarak Bağla
                             </button>
                           )}
                           <button className="btn-ghost btn-sm" title="Bağlantıyı kaldır" disabled={busyId === a.id} onClick={() => remove(a)}>

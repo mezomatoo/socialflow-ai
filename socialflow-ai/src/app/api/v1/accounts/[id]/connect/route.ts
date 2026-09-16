@@ -23,14 +23,22 @@ export const POST = apiRoute(
     if (!account) return notFound('Hesap bulunamadı.');
 
     const platform = account.platform as PlatformCode;
+    // "Simülasyon olarak bağla": kimlikler tanımlı olsa bile OAuth'un
+    // tamamlanamadığı ortamlarda (örn. dış ağa kapalı önizleme) hesabı
+    // bilinçli olarak simülasyona almak için açık istek.
+    const explicitSimulate = new URL(request.url).searchParams.get('simulate') === '1';
 
     const creds = await resolveProviderCredentials(session.user.workspaceId, platform);
 
-    if (session.user.demoMode || !creds) {
+    if (explicitSimulate || session.user.demoMode || !creds) {
       await audit({
         workspaceId: session.user.workspaceId,
         userId: session.user.id,
-        action: session.user.demoMode ? 'account.connect.demo' : 'account.connect.simulated',
+        action: explicitSimulate
+          ? 'account.connect.simulated_explicit'
+          : session.user.demoMode
+            ? 'account.connect.demo'
+            : 'account.connect.simulated',
         entityType: 'SocialAccount',
         entityId: params.id,
         request
@@ -46,9 +54,11 @@ export const POST = apiRoute(
       return ok({
         demo: true,
         authorizeUrl: null,
-        message: session.user.demoMode
-          ? `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`
-          : `${account.displayName} bağlandı. ${platform} için API kimlik bilgisi tanımlı olmadığından bağlantı simülasyon olarak tamamlandı; gerçek OAuth akışı için Ayarlar → Entegrasyonlar bölümünden kimlik bilgilerinizi tanımlayın.`,
+        message: explicitSimulate
+          ? `${account.displayName} simülasyon olarak bağlandı; içerik planlama ve üretimi hazır. Gerçek yayınlama, platform OAuth onayı tamamlandığında etkinleşir (bu adım gerçek bir sunucu/alan adında otomatik tamamlanır).`
+          : session.user.demoMode
+            ? `Demo Modu — ${account.displayName} hesabı simülasyon olarak bağlı. Gerçek OAuth akışı için ${platform} API kimlik bilgilerini Ayarlar → Entegrasyonlar bölümünden tanımlayın.`
+            : `${account.displayName} bağlandı. ${platform} için API kimlik bilgisi tanımlı olmadığından bağlantı simülasyon olarak tamamlandı; gerçek OAuth akışı için Ayarlar → Entegrasyonlar bölümünden kimlik bilgilerinizi tanımlayın.`,
         credentialsSet: Boolean(creds)
       });
     }

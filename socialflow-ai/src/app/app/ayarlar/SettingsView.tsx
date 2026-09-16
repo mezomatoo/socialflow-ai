@@ -641,7 +641,9 @@ const CREDENTIAL_GUIDE: Record<
       'Uygulamaya “Instagram Graph API” ürününü ekleyin.',
       'Ayarlar → Temel bölümündeki App ID ve App Secret değerlerini kopyalayıp aşağıya yapıştırın.',
       'Aşağıdaki callback adresini uygulamanızın izinli yönlendirme adreslerine ekleyin.',
-      'Not: Instagram hesabınız “İşletme” veya “Creator” türünde olmalı ve bir Facebook Sayfasına bağlanmalıdır.'
+      'Instagram hesabınız “İşletme” veya “Creator” türünde olmalı ve bir Facebook Sayfasına bağlanmalıdır.',
+      'Uygulama “Geliştirme Modu”ndaysa yalnızca uygulamada rolü olan kişiler giriş yapabilir: Roller bölümünden kendinizi ve bağlayacak ekip üyelerini ekleyin.',
+      'Bağlantı sırasında Meta “geçersiz redirect” derse callback adresini hem “Instagram” hem “Facebook Login” ürün ayarlarına eklediğinizden emin olun.'
     ]
   },
   FACEBOOK: {

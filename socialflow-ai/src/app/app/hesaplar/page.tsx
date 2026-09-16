@@ -49,6 +49,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: { b
   return (
     <AccountsView
       connectionResult={searchParams.baglanti && Object.hasOwn(INSTAGRAM_CONNECTION_MESSAGES, searchParams.baglanti) ? INSTAGRAM_CONNECTION_MESSAGES[searchParams.baglanti as keyof typeof INSTAGRAM_CONNECTION_MESSAGES] : null}
+      connectionResultCode={searchParams.baglanti ?? null}
       items={JSON.parse(JSON.stringify(items))}
       brands={JSON.parse(JSON.stringify(brands))}
       platforms={JSON.parse(JSON.stringify(PLATFORM_LIST.map((p) => ({ code: p.code, name: p.name, color: p.brandColor }))))}
