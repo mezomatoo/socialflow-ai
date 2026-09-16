@@ -61,6 +61,7 @@ export const CONTENT_STATUS = [
   'PUBLISHING',
   'PUBLISHED',
   'PARTIALLY_PUBLISHED',
+  'MANUAL_PENDING',
   'FAILED',
   'APPROVAL_PENDING'
 ] as const;
@@ -77,6 +78,7 @@ export const PUBLISH_STATUS = [
   'FAILED',
   'CANCELLED',
   'APPROVAL_PENDING',
+  'MANUAL_PENDING',
   'PARTIAL'
 ] as const;
 export type PublishStatus = (typeof PUBLISH_STATUS)[number];
@@ -322,6 +324,7 @@ export const CONTENT_STATUS_LABELS: Record<ContentStatus, string> = {
   PUBLISHING: 'Yayınlanıyor',
   PUBLISHED: 'Yayınlandı',
   PARTIALLY_PUBLISHED: 'Kısmen Yayınlandı',
+  MANUAL_PENDING: 'Manuel Onay Bekliyor',
   FAILED: 'Hata',
   APPROVAL_PENDING: 'Onay Bekliyor'
 };
@@ -337,6 +340,7 @@ export const PUBLISH_STATUS_LABELS: Record<PublishStatus, string> = {
   FAILED: 'Yayınlanamadı',
   CANCELLED: 'İptal Edildi',
   APPROVAL_PENDING: 'Onay Bekliyor',
+  MANUAL_PENDING: 'Manuel Onay Bekliyor',
   PARTIAL: 'Kısmen Yayınlandı'
 };
 

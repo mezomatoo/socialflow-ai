@@ -232,6 +232,8 @@ model SocialAccount {
   lastValidatedAt  DateTime?
   lastError        String? // kullanıcıya gösterilecek Türkçe, anlaşılır mesaj
   demoAccount      Boolean   @default(true)
+  // Yayın modu: AUTO = resmî OAuth/API ile otomatik, MANUAL = API'siz elle yayınlama.
+  publishMode      String    @default("AUTO") // AUTO | MANUAL
   // Faz 2: sağlayıcı yetenek bayrakları (JSON dizi) + son eşitleme zamanı.
   capabilities     String    @default("[]") // PG: Json — ProviderCapability anahtarları
   lastSyncedAt     DateTime?
