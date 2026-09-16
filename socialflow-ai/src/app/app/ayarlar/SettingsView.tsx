@@ -7,6 +7,7 @@ import { Badge, Switch, Tabs, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toaster';
 import { api, ApiError } from '@/lib/client/api';
 import { formatBytes } from '@/lib/format';
+import { SocialAccountPrivacyModal } from '@/components/SocialAccountPrivacyModal';
 import {
   CONTENT_TYPE_LABELS,
   INTEGRATION_STATUS_LABELS,
@@ -769,6 +770,7 @@ function IntegrationsTab({ demoMode, canEdit }: { integrations: IntegrationRow[]
   const [clientSecret, setClientSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const toast = useToast();
 
   async function load() {
@@ -861,6 +863,16 @@ function IntegrationsTab({ demoMode, canEdit }: { integrations: IntegrationRow[]
             <strong className="text-ink">3.</strong> Hesaplar sayfasından hesabını bağla
           </span>
         </div>
+        <p className="flex items-start gap-1.5 pt-1 text-[11.5px] text-ink-faint">
+          <Icon name="shield" size={13} className="mt-0.5 shrink-0" />
+          <span>
+            Bağlantı sırasında kullanıcı parolaları asla istenmez ve saklanmaz; giriş, platformun resmî OAuth
+            ekranında yapılır.{' '}
+            <button type="button" className="link font-semibold" onClick={() => setPrivacyOpen(true)}>
+              KVKK ve parola politikası
+            </button>
+          </span>
+        </p>
       </div>
 
       {!items ? (
@@ -1043,6 +1055,8 @@ function IntegrationsTab({ demoMode, canEdit }: { integrations: IntegrationRow[]
           </div>
         </Modal>
       )}
+
+      <SocialAccountPrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </div>
   );
 }

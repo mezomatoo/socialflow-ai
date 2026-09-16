@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toaster';
 import { api, ApiError } from '@/lib/client/api';
 import { formatRelative } from '@/lib/format';
 import { PLATFORM_META, type PlatformCode } from '@/lib/platforms/platforms';
+import { SocialAccountPrivacyModal } from '@/components/SocialAccountPrivacyModal';
 
 interface AccountItem {
   id: string;
@@ -62,6 +63,7 @@ export function AccountsView({
   const [addOpen, setAddOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [credentialsByPlatform, setCredentialsByPlatform] = useState<Record<string, boolean>>({});
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   // Platform kimliklerinin tanımlı olup olmadığını bilmek, “Hesap Bağla”
   // akışında kullanıcıya doğru rehberliği göstermek için.
@@ -193,7 +195,10 @@ export function AccountsView({
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">Sosyal Medya Hesapları</h1>
           <p className="mt-1 text-[13.5px] text-ink-muted">
-            Resmî OAuth ile bağlanan hesaplar. Parola veya oturum bilgisi asla istenmez ve saklanmaz.
+            Resmî OAuth ile bağlanır: parolanızı platformun kendi ekranına yazarsınız, bize asla gelmez.{' '}
+            <button className="link font-semibold" onClick={() => setPrivacyOpen(true)}>
+              Parola ve KVKK politikası
+            </button>
           </p>
         </div>
         <button className="btn-primary btn-md" onClick={() => setAddOpen(true)}>
@@ -369,6 +374,7 @@ export function AccountsView({
           platforms={platforms}
           demoMode={demoMode}
           credentialsByPlatform={credentialsByPlatform}
+          onOpenPrivacy={() => setPrivacyOpen(true)}
           onClose={() => setAddOpen(false)}
           onCreated={(acc, status) => {
             setItems((prev) => [...prev, status ? { ...acc, connectionStatus: status } : acc]);
@@ -376,6 +382,8 @@ export function AccountsView({
           }}
         />
       )}
+
+      <SocialAccountPrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </div>
   );
 }
@@ -385,6 +393,7 @@ function AddAccountModal({
   platforms,
   demoMode,
   credentialsByPlatform,
+  onOpenPrivacy,
   onClose,
   onCreated
 }: {
@@ -392,6 +401,7 @@ function AddAccountModal({
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
   credentialsByPlatform: Record<string, boolean>;
+  onOpenPrivacy: () => void;
   onClose: () => void;
   onCreated: (acc: AccountItem, statusOverride?: string) => void;
 }) {
@@ -531,16 +541,37 @@ function AddAccountModal({
               <a href="/app/ayarlar?tab=entegrasyonlar" className="link font-semibold" onClick={onClose}>
                 Ayarlar → Entegrasyonlar
               </a>
-              ’dan kimlik tanımlaması yeterlidir.
+              ’dan kimlik tanımlaması yeterlidir. Parolanız bu süreçte de asla istenmez ve saklanmaz.
             </p>
           </div>
         )}
         {credsReady && !demoMode && (
-          <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink">
-            <Icon name="check-circle" size={15} className="mt-0.5 shrink-0 text-success" />
-            <p>
-              <strong>{platformName} kimliği tanımlı.</strong> “{platformName} ile Bağlan”a bastığınızda platformun
-              resmî giriş ekranı açılır; parolanızı asla bizimle paylaşmazsınız.
+          <div className="space-y-2 rounded-xl border border-success/30 bg-success/10 p-3.5">
+            <p className="flex items-center gap-2 text-[13px] font-bold text-ink">
+              <Icon name="check-circle" size={15} className="shrink-0 text-success" />
+              {platformName} ile 4 adımda bağlanın
+            </p>
+            <ol className="space-y-1 pl-1">
+              {[
+                `“${platformName} ile Bağlan” düğmesine basın.`,
+                `${platformName}’ın kendi resmî giriş ekranı açılır.`,
+                'Kullanıcı adınızı ve parolanızı yalnızca o ekrana yazın.',
+                'İzinleri onaylayın — hesabınız bağlanır.'
+              ].map((step, i) => (
+                <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-ink">
+                  <span className="mt-0.5 shrink-0 font-mono text-[11px] font-bold text-success">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="flex items-start gap-1.5 text-[11.5px] text-ink-faint">
+              <Icon name="shield" size={13} className="mt-0.5 shrink-0" />
+              <span>
+                Parolanız bize asla iletilmez ve saklanmaz.{' '}
+                <button type="button" className="link font-semibold" onClick={onOpenPrivacy}>
+                  KVKK ve parola politikası
+                </button>
+              </span>
             </p>
           </div>
         )}
