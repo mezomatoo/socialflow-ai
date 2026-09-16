@@ -19,6 +19,7 @@ interface AccountItem {
   accountType: string;
   connectionStatus: string;
   demoAccount: boolean;
+  publishMode?: string;
   lastError: string | null;
   brandId: string | null;
   brandName: string | null;
@@ -175,6 +176,25 @@ export function AccountsView({
     }
   }
 
+  /** Yayın modu: Otomatik (OAuth/API) veya Manuel (API'siz, elle yayınlama). */
+  async function changePublishMode(a: AccountItem, mode: string) {
+    setBusyId(a.id);
+    try {
+      await api.patch(`/api/accounts/${a.id}`, { publishMode: mode });
+      setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, publishMode: mode } : x)));
+      toast.success(
+        mode === 'MANUAL' ? 'Manuel Yayın açıldı' : 'Otomatik yayına geçildi',
+        mode === 'MANUAL'
+          ? 'Bu hesap için API gerekmez: yayınlarken içeriği kopyalar, platformda paylaşır ve onaylarsınız.'
+          : 'Bu hesap artık kimlikler tanımlıysa resmî API üzerinden otomatik yayınlar.'
+      );
+    } catch (e) {
+      toast.error('Güncellenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(a: AccountItem) {
     if (!window.confirm(`${a.displayName} (@${a.handle.replace(/^@/, '')}) bağlantısı kaldırılsın mı?`)) return;
     setBusyId(a.id);
@@ -299,6 +319,7 @@ export function AccountsView({
                           <div className="flex items-center gap-2">
                             <p className="truncate text-[14px] font-bold text-ink">{a.displayName}</p>
                             {a.demoAccount && <Badge tone="warning">Demo</Badge>}
+                            {a.publishMode === 'MANUAL' && <Badge tone="neutral">API'siz Yayın</Badge>}
                           </div>
                           <p className="truncate text-[12.5px] text-ink-muted">
                             @{a.handle.replace(/^@/, '')} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
@@ -334,6 +355,16 @@ export function AccountsView({
                               {b.name}
                             </option>
                           ))}
+                        </select>
+                        <select
+                          className="select h-8 w-auto min-w-[150px] py-0 text-[12px]"
+                          value={a.publishMode ?? 'AUTO'}
+                          disabled={busyId === a.id}
+                          onChange={(e) => changePublishMode(a, e.target.value)}
+                          title="Otomatik: resmî API/OAuth ile yayınlanır (kimlik gerekir). Manuel: API'siz; içeriği kopyalar, platformda kendiniz paylaşır ve onaylarsınız."
+                        >
+                          <option value="AUTO">Yayın: Otomatik (API)</option>
+                          <option value="MANUAL">Yayın: Manuel (API'siz)</option>
                         </select>
                         <div className="ml-auto flex items-center gap-1">
                           <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => runHealthCheck(a)} title="Bağlantı sağlığını denetle">

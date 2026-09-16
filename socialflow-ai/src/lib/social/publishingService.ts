@@ -44,6 +44,11 @@ export interface PublishTargetResult {
   retryAfterMs?: number | null;
   demoMode: boolean;
   permalink?: string | null;
+  /** Manuel yayın modunda arayüzün kopyalama/öneri gösterebilmesi için. */
+  caption?: string;
+  mediaUrl?: string | null;
+  platformName?: string;
+  manualMode?: boolean;
 }
 
 /**
@@ -69,6 +74,42 @@ export async function publishPlatformContent(
   const platform = pc.platform as PlatformCode;
   const contentType = pc.contentType as ContentType;
   const label = pc.content.title || `${PLATFORM_META[platform]?.name ?? platform}`;
+
+  // API'siz (manuel) yayınlama: hesap "Manuel Yayın" modundaysa sağlayıcıya
+  // hiç gidilmez; içerik kopyalanıp platformda elle paylaşılır ve kullanıcı
+  // "Yayınlandı" onayı verir. Kimlik, token veya API gerektirmez.
+  if (pc.socialAccount?.publishMode === 'MANUAL') {
+    await prisma.platformContent.update({
+      where: { id: pc.id },
+      data: { status: 'MANUAL_PENDING', lastError: null, updatedAt: new Date() }
+    });
+    await rollupContentStatus(pc.contentId);
+    await audit({
+      workspaceId: ctx.workspaceId,
+      userId: ctx.userId ?? null,
+      action: 'content.publish.manual_prepared',
+      entityType: 'PlatformContent',
+      entityId: pc.id,
+      metadata: { platform }
+    });
+    return {
+      platformContentId: pc.id,
+      platform,
+      contentType,
+      label,
+      ok: true,
+      status: 'MANUAL_PENDING',
+      message: `${PLATFORM_META[platform]?.name ?? platform} hesabı Manuel Yayın modunda: metni kopyalayıp platformda paylaşın, ardından “Yayınlandı” onayı verin.`,
+      action: { label: 'Manuel Yayınla', route: `/app/icerik/${pc.contentId}` },
+      retryable: false,
+      demoMode: false,
+      permalink: null,
+      caption: pc.caption || pc.content.masterCaption || '',
+      mediaUrl: pc.renderedUrl ?? pc.mediaAsset?.publicUrl ?? null,
+      platformName: PLATFORM_META[platform]?.name ?? platform,
+      manualMode: true
+    };
+  }
 
   // Çalışma alanı Demo Modu'ndan çıkmış olsa bile platform için API kimlik
   // bilgisi tanımlı değilse yayınlama kendiliğinden simülasyona döner
@@ -651,6 +692,7 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
     publishing: children.filter((c) => c.status === 'PUBLISHING' || c.status === 'PROCESSING').length,
     scheduled: children.filter((c) => c.status === 'SCHEDULED').length,
     approval: children.filter((c) => c.status === 'APPROVAL_PENDING').length,
+    manual: children.filter((c) => c.status === 'MANUAL_PENDING').length,
     draft: children.filter((c) => c.status === 'DRAFT').length
   };
 
@@ -659,6 +701,8 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
   else if (counts.published === children.length) status = 'PUBLISHED';
   else if (counts.published > 0 && counts.failed > 0) status = 'PARTIALLY_PUBLISHED';
   else if (counts.published > 0 && counts.scheduled > 0) status = 'PARTIALLY_PUBLISHED';
+  else if (counts.published > 0 && counts.manual > 0) status = 'PARTIALLY_PUBLISHED';
+  else if (counts.manual > 0) status = 'MANUAL_PENDING';
   else if (counts.failed > 0) status = 'FAILED';
   else if (counts.approval > 0) status = 'APPROVAL_PENDING';
   else if (counts.scheduled > 0) status = 'SCHEDULED';
