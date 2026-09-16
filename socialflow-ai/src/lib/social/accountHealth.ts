@@ -72,7 +72,7 @@ export async function checkAccountHealth(
       key: 'connection',
       label: 'Bağlantı',
       level: 'ERROR',
-      message: `Hesap bağlantısı ${status} durumunda. Yeniden bağlamanız gerekiyor.`
+      message: `Hesap bağlantısı ${status} durumunda. Karttaki “Yetkilendir” düğmesiyle resmî OAuth akışını başlatabilir; OAuth'u beklemek istemezseniz “Simülasyon Olarak Bağla” ile hesabı hemen kullanılabilir yapabilirsiniz.`
     });
   }
 
