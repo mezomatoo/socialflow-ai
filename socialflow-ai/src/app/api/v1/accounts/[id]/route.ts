@@ -18,6 +18,11 @@ export const PATCH = apiRoute(
       if (data.brandId && !await prisma.brand.findFirst({ where: { id: data.brandId, workspaceId: session.user.workspaceId } })) return notFound('Marka bulunamadı.');
     }
     if (body.accountType !== undefined) data.accountType = String(body.accountType);
+    if (body.publishMode !== undefined) {
+      const mode = String(body.publishMode);
+      if (!['AUTO', 'MANUAL'].includes(mode)) return badRequest('Geçersiz yayın modu.');
+      data.publishMode = mode;
+    }
     await prisma.socialAccount.update({ where: { id: params.id }, data });
     await audit({ workspaceId: session.user.workspaceId, userId: session.user.id, action: 'account.update', entityType: 'SocialAccount', entityId: params.id, request });
     return ok({ updated: true });

@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import prisma from '../prisma';
-import { env } from '../env';
 import { randomToken, sha256 } from '../crypto';
 import type { Role } from '../platforms/platforms';
 
@@ -25,31 +24,42 @@ const SESSION_TTL_DAYS = 14;
 const isProd = process.env.APP_ENV === 'production';
 
 /**
- * ÖNİZLEME OTURUMU (demo kolaylığı)
+ * ÖNİZLEME OTURUMU (geliştirme kolaylığı)
  * ---------------------------------------------------------------------------
  * Arena canlı önizlemesi uygulamayı, çerez saklamayan (opak/üçüncü-taraf) bir
  * iframe içinde ve `e2b-traffic-access-token` gerektiren bir proxy arkasında
  * sunar. Bu ortamda çerez tabanlı oturum çalışmaz; kullanıcı giriş yapsa bile
  * oturum çerezi geri gönderilmez.
  *
- * Bu yüzden YALNIZCA geliştirme + demo modunda (APP_ENV != production ve
- * DEMO_MODE açık), geçerli bir çerez oturumu yoksa demo kullanıcıya otomatik
- * oturum verilir. Üretimde (APP_ENV=production) bu davranış TAMAMEN kapalıdır;
- * normal çerez + CSRF + RBAC güvenliği aynen uygulanır.
- * `PREVIEW_AUTOLOGIN=false` ile geliştirme sırasında da kapatılabilir.
+ * Bu yüzden YALNIZCA geliştirmede (APP_ENV != production), geçerli bir çerez
+ * oturumu yoksa demo kullanıcıya otomatik oturum verilir. Üretimde
+ * (APP_ENV=production) bu davranış TAMAMEN kapalıdır; normal çerez + CSRF +
+ * RBAC güvenliği aynen uygulanır. `PREVIEW_AUTOLOGIN=false` ile geliştirme
+ * sırasında da kapatılabilir. Demo Modu (DEMO_MODE) bundan bağımsızdır;
+ * yalnızca arayüz uyarılarını ve sağlayıcı simülasyon etiketlerini etkiler.
  */
-const previewAuth = !isProd && env.demoMode && process.env.PREVIEW_AUTOLOGIN !== 'false';
+const previewAuth = !isProd && process.env.PREVIEW_AUTOLOGIN !== 'false';
 const PREVIEW_DEMO_EMAIL = process.env.PREVIEW_DEMO_EMAIL || 'demo@socialflow.ai';
 
 let demoSessionCache: SessionContext | null = null;
 
-/** Demo kullanıcı için sentetik oturum (çerez gerektirmez). */
+/** Demo/ilk kullanıcı için sentetik oturum (çerez gerektirmez). */
 async function getPreviewDemoSession(): Promise<SessionContext | null> {
   if (demoSessionCache) return demoSessionCache;
-  const user = await prisma.user.findFirst({
+  const includeWorkspace = { workspace: { select: { id: true, name: true, slug: true, demoMode: true, timezone: true, locale: true } } };
+  let user = await prisma.user.findFirst({
     where: { email: PREVIEW_DEMO_EMAIL, isActive: true },
-    include: { workspace: { select: { id: true, name: true, slug: true, demoMode: true, timezone: true, locale: true } } }
+    include: includeWorkspace
   });
+  // İlk kurulumda demo kullanıcısı yoktur; önizlemenin çalışabilmesi için
+  // kayıtlı İLK aktif kullanıcıya düşülür.
+  if (!user) {
+    user = await prisma.user.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+      include: includeWorkspace
+    });
+  }
   if (!user) return null;
   demoSessionCache = {
     sessionId: 'preview-demo',

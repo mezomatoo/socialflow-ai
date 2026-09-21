@@ -5,15 +5,17 @@ import { clientIp } from '@/lib/auth/session';
 import { audit } from '@/lib/security/audit';
 import { f, validate } from '@/lib/zod-lite';
 import { env } from '@/lib/env';
+import { emailService } from '@/lib/email/service';
 
 /**
- * Şifre sıfırlama talebi (§12)
+ * Şifre sıfırlama talebi (§12, §107)
  * ---------------------------------------------------------------------------
  * - Yanıt HER ZAMAN aynıdır: e-posta kayıtlı olsun ya da olmasın aynı mesaj
- *   döner (kullanıcı numaralandırma saldırılarını engeller).
+ *   döner (kullanıcı numaralandırma / enumeration saldırılarını engeller).
  * - Token'ın yalnızca SHA-256 özeti saklanır; ham token e-postayla gider.
- * - E-posta gönderimi yapılandırılmadığında (demo/geliştirme) bağlantı, sunucu
- *   logunda ve yanıtın `devHint` alanında gösterilir (yalnızca dev/demo).
+ * - E-posta gönderimi soyutlanmış sağlayıcı (SMTP / Resend / SendGrid / Console / Memory)
+ *   üzerinden yapılır (§107).
+ * - devHint alanı KESİNLİKLE üretimde kapalıdır (yalnızca !isProduction iken dev/demo ortamında döner).
  */
 
 const TOKEN_TTL_MINUTES = 30;
@@ -26,9 +28,13 @@ export const POST = apiRoute(
     const data = validate<{ email: string }>(body, { email: f.string({ message: 'E-posta', max: 200 }) });
     const email = data.email.toLowerCase().trim();
 
-    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, workspaceId: true, isActive: true } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, workspaceId: true, isActive: true }
+    });
 
     let devHint: string | undefined;
+
     if (user && user.isActive) {
       const rawToken = randomToken(32);
       await prisma.passwordResetToken.create({
@@ -41,9 +47,24 @@ export const POST = apiRoute(
       });
 
       const link = `${env.appUrl}/sifremi-sifirla?token=${rawToken}`;
-      // E-posta altyapısı Phase 2'de bağlanacak; şimdilik denetim kaydı + log.
-      console.info(`[auth] Şifre sıfırlama bağlantısı (${email}): ${link}`);
-      if (!env.isProduction) devHint = link;
+
+      // Gerçek e-posta sağlayıcısıyla gönderim (§107)
+      try {
+        await emailService.sendPasswordResetEmail({
+          to: email,
+          resetUrl: link,
+          userName: user.name
+        });
+      } catch (sendErr) {
+        // Hata kullanıcıya sızdırılmaz (kullanıcı numaralandırma ve hata sızıntısı engeli)
+        console.error('[auth] Şifre sıfırlama e-postası gönderilemedi:', sendErr instanceof Error ? sendErr.message : String(sendErr));
+      }
+
+      // Güvenlik kuralı (§107): devHint KESİNLİKLE üretimde kapalıdır!
+      if (!env.isProduction) {
+        devHint = link;
+        console.info(`[auth:dev] Şifre sıfırlama bağlantısı (${email}): ${link}`);
+      }
 
       await audit({
         workspaceId: user.workspaceId,

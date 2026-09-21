@@ -203,6 +203,7 @@ export function ComposerView({
   const [validating, setValidating] = useState(false);
   const [preflight, setPreflight] = useState<Preflight | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [manualPending, setManualPending] = useState<any[] | null>(null);
   const [selOpen, setSelOpen] = useState(false);
   const [schedOpen, setSchedOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -488,7 +489,12 @@ export function ComposerView({
     try {
       const res = await api.post<{ ready: number; total: number; results: any[] }>(`/api/contents/${content.id}/publish`, { targetIds });
       await reload();
-      if (res.ready === res.total && res.total > 0) {
+      const manuals = (res.results ?? []).filter((r) => r.status === 'MANUAL_PENDING');
+      const automated = res.total - manuals.length;
+      if (manuals.length > 0) setManualPending(manuals);
+      if (manuals.length > 0 && automated === 0) {
+        toast.info('Manuel yayın hazırlanıyor', 'API’siz hesaplar için içerik kopyalama ekranı açıldı.');
+      } else if (res.ready === res.total && res.total > 0) {
         toast.success(demoMode ? 'Demo yayını tamamlandı' : 'Yayınlandı', `${res.ready}/${res.total} hedef başarılı.`);
       } else {
         toast.warning('Kısmen yayınlandı', `${res.ready}/${res.total} hedef başarılı. Başarısız olanlar yeniden denenebilir.`);
@@ -821,6 +827,18 @@ export function ComposerView({
           onPublish={async () => {
             setPublishOpen(false);
             await publishNow();
+          }}
+        />
+      )}
+
+      {manualPending && manualPending.length > 0 && (
+        <ManualPublishModal
+          items={manualPending}
+          contentId={content.id}
+          onClose={() => setManualPending(null)}
+          onConfirmed={async () => {
+            setManualPending(null);
+            await reload();
           }}
         />
       )}
@@ -1454,6 +1472,147 @@ function VersionHistoryModal({ contentId, onClose, onRestored }: { contentId: st
           ))}
         </div>
       )}
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------- Manuel Yayın ---- */
+
+/** Platformların web adresleri — kullanıcı paylaşımı elle yapar. */
+const PLATFORM_SITE_URLS: Record<string, string> = {
+  INSTAGRAM: 'https://www.instagram.com',
+  FACEBOOK: 'https://www.facebook.com',
+  X: 'https://x.com',
+  LINKEDIN: 'https://www.linkedin.com/feed',
+  TIKTOK: 'https://www.tiktok.com',
+  YOUTUBE: 'https://studio.youtube.com',
+  THREADS: 'https://www.threads.net',
+  PINTEREST: 'https://www.pinterest.com',
+  GOOGLE_BUSINESS: 'https://business.google.com'
+};
+
+/**
+ * API'siz (manel) yayınlama penceresi: kullanıcı metni kopyalar, platformu
+ * açar, paylaşımı kendisi yapar ve "Yayınlandı" onayı verir.
+ */
+function ManualPublishModal({
+  items,
+  contentId,
+  onClose,
+  onConfirmed
+}: {
+  items: any[];
+  contentId: string;
+  onClose: () => void;
+  onConfirmed: () => Promise<void> | void;
+}) {
+  const toast = useToast();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [done, setDone] = useState<Record<string, boolean>>({});
+
+  async function copyCaption(text: string) {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      toast.success('Kopyalandı', 'Metin panoya kopyalandı; platformda yapıştırın.');
+    } catch {
+      toast.error('Kopyalanamadı', 'Metni elle seçip kopyalayabilirsiniz.');
+    }
+  }
+
+  async function confirm(it: any) {
+    setBusyId(it.platformContentId);
+    try {
+      await api.post(`/api/contents/${contentId}/manual-publish`, {
+        platformContentId: it.platformContentId,
+        url: urls[it.platformContentId]?.trim() || undefined
+      });
+      setDone((d) => ({ ...d, [it.platformContentId]: true }));
+      toast.success('Yayınlandı olarak işaretlendi', `${it.platformName ?? it.platform} hedefi tamamlandı.`);
+      const remaining = items.filter((x) => x.platformContentId !== it.platformContentId && !done[x.platformContentId]);
+      if (remaining.length === 0) await onConfirmed();
+    } catch (e) {
+      toast.error('Onaylanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Manuel Yayın — API Gerektirmez"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary btn-md" onClick={onClose}>
+            Kapat
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <p className="rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink">
+          Bu hesaplar <strong>Manuel Yayın</strong> modunda: hiçbir API kullanılmaz. Metni kopyalayın, platformu
+          açıp paylaşımı yapın ve aşağıdan <strong>“Yayınlandı”</strong> onayı verin.
+        </p>
+
+        {items.map((it) => {
+          const finished = done[it.platformContentId];
+          const site = PLATFORM_SITE_URLS[it.platform as string];
+          return (
+            <div key={it.platformContentId} className="rounded-xl border border-line bg-surface-subtle p-3.5 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <PlatformIcon platform={it.platform} size={22} rounded="md" />
+                <p className="text-[13.5px] font-bold text-ink">{it.platformName ?? it.platform}</p>
+                {finished && <Badge tone="success">Yayınlandı</Badge>}
+              </div>
+
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="label">Paylaşım metni</label>
+                  <button className="btn-secondary btn-sm" onClick={() => copyCaption(it.caption)}>
+                    <Icon name="copy" size={13} /> Metni Kopyala
+                  </button>
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-surface p-2.5 text-[12.5px] text-ink-soft">
+                  {it.caption || '(metin yok)'}
+                </pre>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {it.mediaUrl && (
+                  <a href={it.mediaUrl} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
+                    <Icon name="image" size={13} /> Medyayı Aç
+                  </a>
+                )}
+                {site && (
+                  <a href={site} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
+                    <Icon name="globe" size={13} /> {it.platformName ?? it.platform}’ı Aç
+                  </a>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                  className="input"
+                  placeholder="Gönderi bağlantısı (isteğe bağlı)"
+                  value={urls[it.platformContentId] ?? ''}
+                  disabled={finished}
+                  onChange={(e) => setUrls((u) => ({ ...u, [it.platformContentId]: e.target.value }))}
+                />
+                <button
+                  className="btn-primary btn-md"
+                  disabled={finished || busyId === it.platformContentId}
+                  onClick={() => confirm(it)}
+                >
+                  {finished ? 'Tamamlandı' : busyId === it.platformContentId ? 'İşleniyor…' : 'Yayınlandı Onayı Ver'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </Modal>
   );
 }

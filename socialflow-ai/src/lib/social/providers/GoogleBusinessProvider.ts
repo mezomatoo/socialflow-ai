@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -24,8 +23,8 @@ export class GoogleBusinessProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
-      clientId: env.providers.GOOGLE_BUSINESS.id,
-      clientSecret: env.providers.GOOGLE_BUSINESS.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['https://www.googleapis.com/auth/business.manage', 'openid', 'email', 'profile'],
       scopeSeparator: ' ',
       extraAuthParams: { access_type: 'offline', prompt: 'consent' }

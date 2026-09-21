@@ -1,7 +1,8 @@
 import prisma from '../prisma';
 import type { SessionContext } from '../auth/session';
 import { hasRole } from '../auth/session';
-import { env, providerCredentialsConfigured } from '../env';
+import { env } from '../env';
+import { resolveProviderCredentials } from './workspaceCredentials';
 import { toCipherText } from '../crypto';
 import { consumeOAuthState, createOAuthState, tokenSetToExpiry } from './oauth2';
 import { InstagramProvider, INSTAGRAM_PUBLISH_SCOPES } from './providers/InstagramProvider';
@@ -25,8 +26,12 @@ export function instagramRedirectUri() {
 }
 async function authorize(session: SessionContext) {
   const user = await prisma.user.findFirst({ where: { id: session.user.id, workspaceId: session.user.workspaceId, isActive: true }, include: { workspace: true } });
-  if (session.sessionId === 'preview-demo' || !user || !hasRole(user.role, 'EDITOR')) throw new ConnectionError('forbidden', 403);
-  if (env.demoMode || user.workspace.demoMode || !providerCredentialsConfigured('INSTAGRAM')) throw new ConnectionError('configuration', 503);
+  // Not: 'preview-demo' oturumları veritabanındaki gerçek bir kullanıcıya
+  // karşılık gelir (önizleme otomatik girişi); rol ve kimlik bilgisi
+  // denetimleri gerçek OAuth akışının güvenliğini sağlar.
+  if (!user || !hasRole(user.role, 'EDITOR')) throw new ConnectionError('forbidden', 403);
+  const creds = await resolveProviderCredentials(user.workspaceId, 'INSTAGRAM');
+  if (!creds) throw new ConnectionError('configuration', 503);
   instagramRedirectUri();
   return user;
 }

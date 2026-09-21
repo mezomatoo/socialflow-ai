@@ -4,6 +4,7 @@ import { ForbiddenError, UnauthorizedError, verifyCsrf, getSession, clientIp, ti
 import { rateLimit, rateLimitHeaders } from './security/rateLimit';
 import { AppError } from './errors';
 import { requestIdOf, reportError, logger } from './observability';
+import { runWithAiWorkspace } from './ai/workspaceContext';
 
 /**
  * Tüm API route'ları için ortak sarmalayıcı.
@@ -109,7 +110,11 @@ export function apiRoute<Ctx = Record<string, string>>(handler: Handler<Ctx>, op
         }
       }
 
-      const response = await handler(request, { params: routeCtx.params, session: session! });
+      // Yapay zeka servislerinin çalışma alanına özgü sağlayıcı/anahtar
+      // çözümleyebilmesi için istek bağlamı çalışma alanıyla sarılır.
+      const response = await runWithAiWorkspace(session?.user.workspaceId ?? null, () =>
+        handler(request, { params: routeCtx.params, session: session! })
+      );
       Object.entries(rateLimitHeaders(rl)).forEach(([k, v]) => response.headers.set(k, v));
       response.headers.set('X-Request-Id', requestId);
       logger.info({

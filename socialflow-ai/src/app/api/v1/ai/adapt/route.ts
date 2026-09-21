@@ -2,7 +2,7 @@ import { apiRoute, ok, badRequest } from '@/lib/api';
 import { adaptCaption } from '@/lib/ai/captionAdaptationService';
 import { getRule, getAllRules } from '@/lib/rules/ruleEngine';
 import prisma from '@/lib/prisma';
-import { aiModeLabel } from '@/lib/ai/llmClient';
+import { aiModeLabelAsync } from '@/lib/ai/llmClient';
 
 /**
  * Önizleme amaçlı tekil uyarlama (composer'da canlı önizleme için).
@@ -59,7 +59,7 @@ export const POST = apiRoute(
         : null
     });
 
-    return ok({ ...out, aiMode: aiModeLabel() });
+    return ok({ ...out, aiMode: await aiModeLabelAsync() });
   },
   { limit: 90 }
 );

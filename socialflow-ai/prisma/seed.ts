@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { BUILTIN_RULES } from '../src/lib/platforms/builtinRules';
+import { isSeedAllowed } from './seed-guard';
 
 import prisma from '../src/lib/prisma';
 
@@ -32,6 +33,18 @@ function hashPassword(password: string) {
 const BUILTIN: any[] = BUILTIN_RULES as any[];
 
 async function main() {
+  // Üretim güvenlik kapısı (§15/§62): seed TÜM tabloları siler; üretimde
+  // yalnızca SEED_ALLOW_PRODUCTION=true ile açıkça onaylanmışsa çalışır.
+  const gate = isSeedAllowed({
+    isProduction: process.env.APP_ENV === 'production',
+    allowProductionSeed: process.env.SEED_ALLOW_PRODUCTION === 'true'
+  });
+  if (!gate.allowed) {
+    console.error(`✋ ${gate.reason}`);
+    process.exit(1);
+  }
+  if (gate.reason) console.warn(`⚠️ ${gate.reason}`);
+
   console.log('→ Veritabanı temizleniyor...');
   // Sıralama: bağımlılıklara göre
   await prisma.publicationAttempt.deleteMany();
@@ -69,7 +82,7 @@ async function main() {
       name: 'Kahve Dükkanı Ajans',
       slug: 'demo-ajans',
       plan: 'AGENCY',
-      demoMode: true,
+      demoMode: false,
       timezone: TZ,
       locale: 'tr-TR'
     }
@@ -87,7 +100,7 @@ async function main() {
       fontFamily: 'Inter',
       defaultLanguage: 'tr',
       defaultTimezone: TZ,
-      demoBanner: true,
+      demoBanner: false,
       aiProvider: 'deterministic'
     }
   });
@@ -247,12 +260,12 @@ async function main() {
         platform: p,
         status: 'NOT_CONFIGURED',
         credentialsSet: false,
-        message: 'API kimlik bilgileri tanımlanmadı. Demo Modu etkin.'
+        message: 'API kimlik bilgileri tanımlanmadı. Kimlik bilgileri tanımlanana kadar bu platform simülasyon olarak çalışır.'
       }
     });
   }
 
-  console.log('→ Sosyal medya hesapları bağlanıyor (demo)...');
+  console.log('→ Sosyal medya hesapları bağlanıyor...');
   const accounts: Record<string, string> = {};
   const accountDefs: [string, string, string, string, string][] = [
     ['INSTAGRAM', '@kahvedukkani', 'Kahve Dükkanı', 'BUSINESS', brand.id],
@@ -277,7 +290,7 @@ async function main() {
         displayName,
         accountType,
         connectionStatus: 'ACTIVE',
-        demoAccount: true,
+        demoAccount: false,
         externalId: `demo_${platform.toLowerCase()}_${slugify(handle)}`,
         scopes: 'demo_scopes',
         lastValidatedAt: new Date()

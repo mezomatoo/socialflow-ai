@@ -110,7 +110,7 @@ export class DemoProvider implements SocialProvider {
       demoMode: true,
       externalPostId: id,
       permalink: null,
-      friendlyMessage: `Demo Modu — ${this.label} (${kind}) için gerçek sosyal medya paylaşımı yapılmadı.`
+      friendlyMessage: `Simülasyon — ${this.label} (${kind}) için gerçek sosyal medya paylaşımı yapılmadı (API kimlik bilgisi tanımlı değil).`
     };
   }
 

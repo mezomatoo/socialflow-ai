@@ -28,6 +28,7 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   check: <path d="m4.5 12.5 5 5 10-11" />,
+  'arrow-right': <path d="M4 12h15M13 6l6 6-6 6" />,
   'check-circle': (
     <>
       <circle cx="12" cy="12" r="9" />

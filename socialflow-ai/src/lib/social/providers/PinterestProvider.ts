@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -19,8 +18,8 @@ export class PinterestProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://www.pinterest.com/oauth/',
       tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
-      clientId: env.providers.PINTEREST.id,
-      clientSecret: env.providers.PINTEREST.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['user_accounts:read', 'boards:read', 'boards:write', 'pins:read', 'pins:write'],
       scopeSeparator: ' ',
       pkce: true,

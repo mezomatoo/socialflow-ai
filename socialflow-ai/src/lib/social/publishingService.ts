@@ -1,5 +1,6 @@
 import prisma from '../prisma';
 import { getProvider } from '../social/registry';
+import { resolveProviderCredentials } from '../social/workspaceCredentials';
 import { getRule } from '../rules/ruleEngine';
 import { fromCipherText } from '../crypto';
 import { storage } from '../storage/storage';
@@ -43,6 +44,11 @@ export interface PublishTargetResult {
   retryAfterMs?: number | null;
   demoMode: boolean;
   permalink?: string | null;
+  /** Manuel yayın modunda arayüzün kopyalama/öneri gösterebilmesi için. */
+  caption?: string;
+  mediaUrl?: string | null;
+  platformName?: string;
+  manualMode?: boolean;
 }
 
 /**
@@ -68,6 +74,50 @@ export async function publishPlatformContent(
   const platform = pc.platform as PlatformCode;
   const contentType = pc.contentType as ContentType;
   const label = pc.content.title || `${PLATFORM_META[platform]?.name ?? platform}`;
+
+  // API'siz (manuel) yayınlama: hesap "Manuel Yayın" modundaysa sağlayıcıya
+  // hiç gidilmez; içerik kopyalanıp platformda elle paylaşılır ve kullanıcı
+  // "Yayınlandı" onayı verir. Kimlik, token veya API gerektirmez.
+  if (pc.socialAccount?.publishMode === 'MANUAL') {
+    await prisma.platformContent.update({
+      where: { id: pc.id },
+      data: { status: 'MANUAL_PENDING', lastError: null, updatedAt: new Date() }
+    });
+    await rollupContentStatus(pc.contentId);
+    await audit({
+      workspaceId: ctx.workspaceId,
+      userId: ctx.userId ?? null,
+      action: 'content.publish.manual_prepared',
+      entityType: 'PlatformContent',
+      entityId: pc.id,
+      metadata: { platform }
+    });
+    return {
+      platformContentId: pc.id,
+      platform,
+      contentType,
+      label,
+      ok: true,
+      status: 'MANUAL_PENDING',
+      message: `${PLATFORM_META[platform]?.name ?? platform} hesabı Manuel Yayın modunda: metni kopyalayıp platformda paylaşın, ardından “Yayınlandı” onayı verin.`,
+      action: { label: 'Manuel Yayınla', route: `/app/icerik/${pc.contentId}` },
+      retryable: false,
+      demoMode: false,
+      permalink: null,
+      caption: pc.caption || pc.content.masterCaption || '',
+      mediaUrl: pc.renderedUrl ?? pc.mediaAsset?.publicUrl ?? null,
+      platformName: PLATFORM_META[platform]?.name ?? platform,
+      manualMode: true
+    };
+  }
+
+  // Çalışma alanı Demo Modu'ndan çıkmış olsa bile platform için API kimlik
+  // bilgisi tanımlı değilse yayınlama kendiliğinden simülasyona döner
+  // (DemoProvider): gerçek OAuth token'ı yoktur ve sahte başarı üretilemez.
+  if (!ctx.demoMode) {
+    const creds = await resolveProviderCredentials(ctx.workspaceId, platform);
+    if (!creds) ctx = { ...ctx, demoMode: true };
+  }
 
   // Onay akışı açıksa
   if (pc.status === 'APPROVAL_PENDING') {
@@ -99,7 +149,7 @@ export async function publishPlatformContent(
       ok: true,
       status: 'PUBLISHED',
       message: existing.demoMode
-        ? 'Demo Modu — bu içerik daha önce simüle edilmişti; gerçek paylaşım yapılmadı.'
+        ? 'Bu içerik daha önce simülasyon olarak yayınlanmıştı; gerçek paylaşım yapılmadı. Çift gönderim engellendi.'
         : 'Bu içerik daha önce yayınlanmış. Çift gönderim engellendi.',
       retryable: false,
       demoMode: existing.demoMode,
@@ -314,7 +364,7 @@ export async function publishPlatformContent(
       title: `${PLATFORM_META[platform]?.name ?? platform} yayını başarılı`,
       message:
         result.demoMode || ctx.demoMode
-          ? `Demo Modu — ${rule.label} için gerçek sosyal medya paylaşımı yapılmadı.`
+          ? `Simülasyon — ${rule.label} için API kimlik bilgisi tanımlı olmadığından gerçek sosyal medya paylaşımı yapılmadı.`
           : `${rule.label} başarıyla yayınlandı.`,
       contentId: pc.contentId,
       actionLabel: result.permalink ? 'Gönderiyi Görüntüle' : 'İçeriği Aç',
@@ -341,7 +391,7 @@ export async function publishPlatformContent(
       status: 'PUBLISHED',
       message:
         result.demoMode || ctx.demoMode
-          ? 'Demo Modu — gerçek sosyal medya paylaşımı yapılmadı.'
+          ? 'Simülasyon — API kimlik bilgisi tanımlı olmadığından gerçek sosyal medya paylaşımı yapılmadı.'
           : `${rule.label} yayınlandı.`,
       retryable: false,
       demoMode: Boolean(result.demoMode || ctx.demoMode),
@@ -642,6 +692,7 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
     publishing: children.filter((c) => c.status === 'PUBLISHING' || c.status === 'PROCESSING').length,
     scheduled: children.filter((c) => c.status === 'SCHEDULED').length,
     approval: children.filter((c) => c.status === 'APPROVAL_PENDING').length,
+    manual: children.filter((c) => c.status === 'MANUAL_PENDING').length,
     draft: children.filter((c) => c.status === 'DRAFT').length
   };
 
@@ -650,6 +701,8 @@ export async function rollupContentStatus(contentId: string): Promise<string> {
   else if (counts.published === children.length) status = 'PUBLISHED';
   else if (counts.published > 0 && counts.failed > 0) status = 'PARTIALLY_PUBLISHED';
   else if (counts.published > 0 && counts.scheduled > 0) status = 'PARTIALLY_PUBLISHED';
+  else if (counts.published > 0 && counts.manual > 0) status = 'PARTIALLY_PUBLISHED';
+  else if (counts.manual > 0) status = 'MANUAL_PENDING';
   else if (counts.failed > 0) status = 'FAILED';
   else if (counts.approval > 0) status = 'APPROVAL_PENDING';
   else if (counts.scheduled > 0) status = 'SCHEDULED';

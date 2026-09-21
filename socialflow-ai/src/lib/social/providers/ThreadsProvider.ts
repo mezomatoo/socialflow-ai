@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -19,8 +18,8 @@ export class ThreadsProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://threads.net/oauth/authorize',
       tokenUrl: 'https://graph.threads.net/oauth/access_token',
-      clientId: env.providers.THREADS.id,
-      clientSecret: env.providers.THREADS.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['threads_basic', 'threads_content_publish'],
       scopeSeparator: ','
     };

@@ -1,4 +1,3 @@
-import { env } from '../../env';
 import type { OAuthConfig } from '../oauth2';
 import { OAuth2Provider } from '../OAuth2Provider';
 import type { AccountProfile, ContentType, PublishPayload, PublishResult } from '../types';
@@ -20,8 +19,8 @@ export class XProvider extends OAuth2Provider {
     return {
       authorizationUrl: 'https://x.com/i/oauth2/authorize',
       tokenUrl: 'https://api.x.com/2/oauth2/token',
-      clientId: env.providers.X.id,
-      clientSecret: env.providers.X.secret,
+      clientId: this.resolveClientCredentials().clientId,
+      clientSecret: this.resolveClientCredentials().clientSecret,
       scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access', 'media.write'],
       scopeSeparator: ' ',
       pkce: true,

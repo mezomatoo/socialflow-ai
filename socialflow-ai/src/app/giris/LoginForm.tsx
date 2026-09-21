@@ -6,12 +6,12 @@ import { Icon } from '@/components/ui/Icon';
 import { Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/client/api';
 
-export function LoginForm({ demoUser }: { demoUser: { email: string; password: string; appName: string } }) {
+export function LoginForm({ demoUser }: { demoUser: { email: string; password: string; appName: string } | null }) {
   const router = useRouter();
   const params = useSearchParams();
   const redirectTo = params.get('yonlendir') || '/app/dashboard';
 
-  const [email, setEmail] = useState(demoUser.email);
+  const [email, setEmail] = useState(demoUser?.email ?? '');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -88,8 +88,9 @@ export function LoginForm({ demoUser }: { demoUser: { email: string; password: s
         {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
       </button>
 
+      {demoUser && (
       <div className="rounded-lg border border-line bg-slate-50 px-3 py-2.5">
-        <p className="text-[11.5px] font-bold uppercase tracking-wide text-slate-500">Demo hesabı</p>
+        <p className="text-[11.5px] font-bold uppercase tracking-wide text-slate-500">Hesap bilgileri</p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-slate-600">
           <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11.5px] text-slate-800">{demoUser.email}</code>
           <br />
@@ -103,9 +104,10 @@ export function LoginForm({ demoUser }: { demoUser: { email: string; password: s
             setPassword('Sosyal2026!');
           }}
         >
-          Demo bilgilerini doldur
+          Bilgileri doldur
         </button>
       </div>
+      )}
 
       <p className="text-center text-[11.5px] leading-relaxed text-slate-400">
         Bu uygulama güvenli oturum çerezleri (HttpOnly), CSRF koruması ve hız sınırlama kullanır.

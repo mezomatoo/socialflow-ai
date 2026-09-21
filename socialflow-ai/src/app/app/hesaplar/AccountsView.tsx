@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
 import { Badge, EmptyState, Modal } from '@/components/ui';
@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toaster';
 import { api, ApiError } from '@/lib/client/api';
 import { formatRelative } from '@/lib/format';
 import { PLATFORM_META, type PlatformCode } from '@/lib/platforms/platforms';
+import { SocialAccountPrivacyModal } from '@/components/SocialAccountPrivacyModal';
 
 interface AccountItem {
   id: string;
@@ -18,6 +19,7 @@ interface AccountItem {
   accountType: string;
   connectionStatus: string;
   demoAccount: boolean;
+  publishMode?: string;
   lastError: string | null;
   brandId: string | null;
   brandName: string | null;
@@ -47,18 +49,40 @@ export function AccountsView({
   brands,
   platforms,
   demoMode,
-  connectionResult
+  connectionResult,
+  connectionResultCode
 }: {
   items: AccountItem[];
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
   connectionResult?: string | null;
+  connectionResultCode?: string | null;
 }) {
   const toast = useToast();
   const [items, setItems] = useState(initial);
   const [addOpen, setAddOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [credentialsByPlatform, setCredentialsByPlatform] = useState<Record<string, boolean>>({});
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  // Platform kimliklerinin tanımlı olup olmadığını bilmek, “Hesap Bağla”
+  // akışında kullanıcıya doğru rehberliği göstermek için.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ items: { platform: string; credentialsSet: boolean }[] }>('/api/settings/integrations')
+      .then((res) => {
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        for (const it of res.items) map[it.platform] = Boolean(it.credentialsSet);
+        setCredentialsByPlatform(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const grouped = useMemo(() => {
     const map = new Map<string, AccountItem[]>();
@@ -77,12 +101,27 @@ export function AccountsView({
         `/api/accounts/${a.id}/connect`
       );
       if (res.demo) {
-        toast.info('Demo Modu bağlantısı', res.message ?? 'Hesap simülasyon olarak bağlı.');
+        toast.info('Bağlantı tamamlandı', res.message ?? 'Hesap bağlandı.');
+        setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, connectionStatus: 'ACTIVE', lastError: null } : x)));
       } else if (res.authorizeUrl) {
         toast.success('Yetkilendirme başlatılıyor', 'Resmî OAuth sayfasına yönlendiriliyorsunuz.');
         window.location.href = res.authorizeUrl;
         return;
       }
+    } catch (e) {
+      toast.error('Bağlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** OAuth tamamlanamadığında bilinçli simülasyon bağlantısı (içerik akışı kesilmez). */
+  async function simulateConnect(a: AccountItem) {
+    setBusyId(a.id);
+    try {
+      const res = await api.post<{ demo: boolean; message?: string }>(`/api/accounts/${a.id}/connect?simulate=1`);
+      setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, connectionStatus: 'ACTIVE', lastError: null } : x)));
+      toast.success('Simülasyon bağlantısı tamamlandı', res.message ?? `${a.displayName} artık kullanılabilir.`);
     } catch (e) {
       toast.error('Bağlanamadı', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
@@ -137,8 +176,27 @@ export function AccountsView({
     }
   }
 
+  /** Yayın modu: Otomatik (OAuth/API) veya Manuel (API'siz, elle yayınlama). */
+  async function changePublishMode(a: AccountItem, mode: string) {
+    setBusyId(a.id);
+    try {
+      await api.patch(`/api/accounts/${a.id}`, { publishMode: mode });
+      setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, publishMode: mode } : x)));
+      toast.success(
+        mode === 'MANUAL' ? 'Manuel Yayın açıldı' : 'Otomatik yayına geçildi',
+        mode === 'MANUAL'
+          ? 'Bu hesap için API gerekmez: yayınlarken içeriği kopyalar, platformda paylaşır ve onaylarsınız.'
+          : 'Bu hesap artık kimlikler tanımlıysa resmî API üzerinden otomatik yayınlar.'
+      );
+    } catch (e) {
+      toast.error('Güncellenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(a: AccountItem) {
-    if (!window.confirm(`${a.displayName} (@${a.handle}) bağlantısı kaldırılsın mı?`)) return;
+    if (!window.confirm(`${a.displayName} (@${a.handle.replace(/^@/, '')}) bağlantısı kaldırılsın mı?`)) return;
     setBusyId(a.id);
     try {
       await api.del(`/api/accounts/${a.id}`);
@@ -157,7 +215,10 @@ export function AccountsView({
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight text-ink sm:text-[28px]">Sosyal Medya Hesapları</h1>
           <p className="mt-1 text-[13.5px] text-ink-muted">
-            Resmî OAuth ile bağlanan hesaplar. Parola veya oturum bilgisi asla istenmez ve saklanmaz.
+            Resmî OAuth ile bağlanır: parolanızı platformun kendi ekranına yazarsınız, bize asla gelmez.{' '}
+            <button className="link font-semibold" onClick={() => setPrivacyOpen(true)}>
+              Parola ve KVKK politikası
+            </button>
           </p>
         </div>
         <button className="btn-primary btn-md" onClick={() => setAddOpen(true)}>
@@ -165,7 +226,38 @@ export function AccountsView({
         </button>
       </div>
 
-      {connectionResult && <div role="status" className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">{connectionResult}</div>}
+      <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-surface-subtle px-4 py-3 text-[12.5px] text-ink-muted">
+        <Icon name="info" size={15} className="shrink-0 text-info" />
+        <span>
+          Burada <strong className="text-ink">kendi hesaplarınızı</strong> bağlarsınız. Platform kimlikleri (App ID /
+          Secret) ise yönetici tarafından{' '}
+          <a href="/app/ayarlar?tab=entegrasyonlar" className="link font-semibold">
+            Ayarlar → Entegrasyonlar
+          </a>
+          ’da bir kez tanımlanır; kimlik tanımlıysa bağlama tek tıkla olur.
+        </span>
+      </div>
+
+      {connectionResult && (
+        <div
+          role="status"
+          className={`mb-4 rounded-xl border p-4 text-sm ${
+            connectionResultCode === 'connected'
+              ? 'border-success/30 bg-success/10 text-ink'
+              : 'border-warning/40 bg-warning/10 text-ink'
+          }`}
+        >
+          <p className="font-semibold">{connectionResult}</p>
+          {connectionResultCode && connectionResultCode !== 'connected' && connectionResultCode !== 'denied' && (
+            <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-90">
+              Bu adım, sunucunun platforma doğrudan erişebildiği gerçek bir alan adında otomatik tamamlanır. Bu
+              önizleme ortamında dış ağ erişimi olmadığından, beklemek istemiyorsanız aşağıdaki hesap kartlarında
+              yer alan <strong>“Simülasyon Olarak Bağla”</strong> düğmesini kullanabilirsiniz; içerik planlama ve
+              üretimi aynen çalışır.
+            </p>
+          )}
+        </div>
+      )}
 
       {demoMode && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[12.5px] text-ink">
@@ -227,9 +319,10 @@ export function AccountsView({
                           <div className="flex items-center gap-2">
                             <p className="truncate text-[14px] font-bold text-ink">{a.displayName}</p>
                             {a.demoAccount && <Badge tone="warning">Demo</Badge>}
+                            {a.publishMode === 'MANUAL' && <Badge tone="neutral">API&apos;siz Yayın</Badge>}
                           </div>
                           <p className="truncate text-[12.5px] text-ink-muted">
-                            @{a.handle} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
+                            @{a.handle.replace(/^@/, '')} · {ACCOUNT_TYPES[a.accountType] ?? a.accountType}
                           </p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
                             <Badge tone={st.tone}>{st.label}</Badge>
@@ -263,6 +356,16 @@ export function AccountsView({
                             </option>
                           ))}
                         </select>
+                        <select
+                          className="select h-8 w-auto min-w-[150px] py-0 text-[12px]"
+                          value={a.publishMode ?? 'AUTO'}
+                          disabled={busyId === a.id}
+                          onChange={(e) => changePublishMode(a, e.target.value)}
+                          title="Otomatik: resmî API/OAuth ile yayınlanır (kimlik gerekir). Manuel: API'siz; içeriği kopyalar, platformda kendiniz paylaşır ve onaylarsınız."
+                        >
+                          <option value="AUTO">Yayın: Otomatik (API)</option>
+                          <option value="MANUAL">Yayın: Manuel (API&apos;siz)</option>
+                        </select>
                         <div className="ml-auto flex items-center gap-1">
                           <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => runHealthCheck(a)} title="Bağlantı sağlığını denetle">
                             <Icon name="shield" size={13} /> Bağlantıyı Test Et
@@ -270,6 +373,16 @@ export function AccountsView({
                           {(a.platform === 'INSTAGRAM' || a.connectionStatus !== 'ACTIVE') && (
                             <button className="btn-secondary btn-sm" disabled={busyId === a.id} onClick={() => connect(a)}>
                               <Icon name="refresh" size={13} /> {a.connectionStatus === 'ACTIVE' ? 'Yeniden Yetkilendir' : 'Yetkilendir'}
+                            </button>
+                          )}
+                          {a.connectionStatus !== 'ACTIVE' && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              disabled={busyId === a.id}
+                              onClick={() => simulateConnect(a)}
+                              title="OAuth onayını beklemeden simülasyon olarak bağla"
+                            >
+                              <Icon name="zap" size={13} /> Simülasyon Olarak Bağla
                             </button>
                           )}
                           <button className="btn-ghost btn-sm" title="Bağlantıyı kaldır" disabled={busyId === a.id} onClick={() => remove(a)}>
@@ -291,13 +404,17 @@ export function AccountsView({
           brands={brands}
           platforms={platforms}
           demoMode={demoMode}
+          credentialsByPlatform={credentialsByPlatform}
+          onOpenPrivacy={() => setPrivacyOpen(true)}
           onClose={() => setAddOpen(false)}
-          onCreated={(acc) => {
-            setItems((prev) => [...prev, acc]);
+          onCreated={(acc, status) => {
+            setItems((prev) => [...prev, status ? { ...acc, connectionStatus: status } : acc]);
             setAddOpen(false);
           }}
         />
       )}
+
+      <SocialAccountPrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </div>
   );
 }
@@ -306,14 +423,18 @@ function AddAccountModal({
   brands,
   platforms,
   demoMode,
+  credentialsByPlatform,
+  onOpenPrivacy,
   onClose,
   onCreated
 }: {
   brands: { id: string; name: string }[];
   platforms: { code: string; name: string; color: string }[];
   demoMode: boolean;
+  credentialsByPlatform: Record<string, boolean>;
+  onOpenPrivacy: () => void;
   onClose: () => void;
-  onCreated: (acc: AccountItem) => void;
+  onCreated: (acc: AccountItem, statusOverride?: string) => void;
 }) {
   const toast = useToast();
   const [platform, setPlatform] = useState(platforms[0]?.code ?? 'INSTAGRAM');
@@ -322,6 +443,10 @@ function AddAccountModal({
   const [accountType, setAccountType] = useState('PROFILE');
   const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
+
+  const platformName = platforms.find((p) => p.code === platform)?.name ?? platform;
+  const credsReady = credentialsByPlatform[platform] === true;
+  const simulate = demoMode || !credsReady;
 
   async function submit() {
     if (!handle.trim()) {
@@ -339,7 +464,7 @@ function AddAccountModal({
         demoAccount: demoMode
       });
       const brand = brands.find((b) => b.id === brandId);
-      onCreated({
+      const acc: AccountItem = {
         id: res.id,
         platform,
         handle: res.handle,
@@ -355,8 +480,41 @@ function AddAccountModal({
         externalId: null,
         tokenExpiresAt: null,
         lastSyncedAt: null
-      });
-      toast.success('Hesap eklendi', res.demoAccount ? 'Demo hesabı olarak eklendi.' : 'Gerçek bağlantı için hesabın yetkilendirme düğmesini kullanın.');
+      };
+
+      // Kimlikler tanımlıysa ek adım yok: doğrudan platformun giriş ekranına git.
+      if (!simulate) {
+        try {
+          const conn = await api.post<{ demo: boolean; authorizeUrl: string | null; message?: string }>(
+            `/api/accounts/${res.id}/connect`
+          );
+          if (!conn.demo && conn.authorizeUrl) {
+            toast.success('Yetkilendirme başlatılıyor', `${platformName} giriş ekranına yönlendiriliyorsunuz.`);
+            onCreated(acc);
+            window.location.href = conn.authorizeUrl;
+            return;
+          }
+        } catch (e) {
+          toast.error('OAuth başlatılamadı', e instanceof ApiError ? e.message : 'Hesap eklendi; “Yetkilendir” düğmesini deneyin.');
+        }
+        onCreated(acc);
+        toast.info('Hesap eklendi', 'Bağlantı hemen başlatılamadı; listedeki “Yetkilendir” düğmesini kullanabilirsiniz.');
+        return;
+      }
+
+      // Kimlik yoksa: simülasyon bağlantısını hemen tamamla, hesap anında kullanılabilir olsun.
+      let statusOverride: string | undefined;
+      try {
+        const conn = await api.post<{ demo: boolean; authorizeUrl: string | null }>(`/api/accounts/${res.id}/connect`);
+        if (conn.demo) statusOverride = 'ACTIVE';
+      } catch {
+        // Simülasyon bile başarısız olursa hesap eklendi olarak kalır.
+      }
+      onCreated(acc, statusOverride);
+      toast.success(
+        'Hesap eklendi (simülasyon)',
+        `${platformName} için API kimliği tanımlı olmadığından hesap simülasyon olarak bağlandı; gerçek yayınlama yapılmaz. Gerçek bağlantı için yönetici Ayarlar → Entegrasyonlar bölümünden kimlik tanımlamalıdır.`
+      );
     } catch (e) {
       toast.error('Eklenemedi', e instanceof ApiError ? e.message : 'Beklenmeyen hata.');
     } finally {
@@ -375,17 +533,12 @@ function AddAccountModal({
             Vazgeç
           </button>
           <button className="btn-primary btn-md" onClick={submit} disabled={saving}>
-            {saving ? 'Ekleniyor…' : 'Hesabı Ekle'}
+            {saving ? 'Bağlanıyor…' : simulate ? 'Hesabı Ekle (Simülasyon)' : `${platformName} ile Bağlan`}
           </button>
         </div>
       }
     >
       <div className="space-y-4">
-        {demoMode && (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink">
-            Demo modunda hesaplar simülasyon olarak eklenir. Gerçek yayınlarda resmî OAuth akışı kullanılır.
-          </p>
-        )}
         <div>
           <label className="label">Platform</label>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -394,16 +547,70 @@ function AddAccountModal({
                 key={p.code}
                 type="button"
                 onClick={() => setPlatform(p.code)}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-medium transition-colors ${
+                className={`relative flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-medium transition-colors ${
                   platform === p.code ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-line text-ink-muted hover:bg-surface-subtle'
                 }`}
               >
+                <span
+                  className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full"
+                  title={credentialsByPlatform[p.code] ? 'Kimlik tanımlı — gerçek bağlantı hazır' : 'Kimlik tanımlı değil'}
+                  style={{ background: credentialsByPlatform[p.code] ? 'var(--success)' : '#cbd5e1' }}
+                />
                 <PlatformIcon platform={p.code} size={24} rounded="md" muted={platform !== p.code} />
                 <span className="truncate">{p.name}</span>
               </button>
             ))}
           </div>
         </div>
+
+        {simulate && !demoMode && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink">
+            <Icon name="alert-triangle" size={15} className="mt-0.5 shrink-0 text-warning" />
+            <p>
+              <strong>{platformName} kimliği henüz tanımlı değil.</strong> Hesap simülasyon olarak bağlanır; planlama
+              ve içerik üretimi çalışır ama gerçek paylaşım yapılmaz. Gerçek bağlantı için yöneticinin{' '}
+              <a href="/app/ayarlar?tab=entegrasyonlar" className="link font-semibold" onClick={onClose}>
+                Ayarlar → Entegrasyonlar
+              </a>
+              ’dan kimlik tanımlaması yeterlidir. Parolanız bu süreçte de asla istenmez ve saklanmaz.
+            </p>
+          </div>
+        )}
+        {credsReady && !demoMode && (
+          <div className="space-y-2 rounded-xl border border-success/30 bg-success/10 p-3.5">
+            <p className="flex items-center gap-2 text-[13px] font-bold text-ink">
+              <Icon name="check-circle" size={15} className="shrink-0 text-success" />
+              {platformName} ile 4 adımda bağlanın
+            </p>
+            <ol className="space-y-1 pl-1">
+              {[
+                `“${platformName} ile Bağlan” düğmesine basın.`,
+                `${platformName}’ın kendi resmî giriş ekranı açılır.`,
+                'Kullanıcı adınızı ve parolanızı yalnızca o ekrana yazın.',
+                'İzinleri onaylayın — hesabınız bağlanır.'
+              ].map((step, i) => (
+                <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-ink">
+                  <span className="mt-0.5 shrink-0 font-mono text-[11px] font-bold text-success">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="flex items-start gap-1.5 text-[11.5px] text-ink-faint">
+              <Icon name="shield" size={13} className="mt-0.5 shrink-0" />
+              <span>
+                Parolanız bize asla iletilmez ve saklanmaz.{' '}
+                <button type="button" className="link font-semibold" onClick={onOpenPrivacy}>
+                  KVKK ve parola politikası
+                </button>
+              </span>
+            </p>
+          </div>
+        )}
+        {demoMode && (
+          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink">
+            Demo modunda hesaplar simülasyon olarak eklenir. Gerçek yayınlarda resmî OAuth akışı kullanılır.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="label">Kullanıcı adı</label>

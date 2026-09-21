@@ -1,0 +1,66 @@
+# SocialFlow AI — Sürekli Entegrasyon (Faz 7 §26)
+# ---------------------------------------------------------------------------
+# Her push ve PR için: kurulum → kod üretimi → typecheck → lint → testler →
+# üretim build'i. Build izlenebilir: bu iş akışı belirli bir Git commit'ine
+# karşı çalışır (§28). Gizli değer İÇERMEZ — tüm ortam değerleri güvenli
+# varsayılanlarla veya test veritabanıyla çalışır (§21/§31: üretim anahtarı
+# asla CI'a yazılmaz).
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Aynı dalda üst üste push'ta eski koşuları iptal et (kaynak tasarrufu).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Doğrulama (typecheck + lint + test + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: development
+      # Testler ayrı SQLite dosyası kullanır (üretim veritabanına dokunmaz, §21).
+      DATABASE_URL: 'file:./prisma/dev.db'
+      TEST_DATABASE_URL: 'file:./prisma/test.db'
+    steps:
+      - name: Depo_checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22 kurulumu (npm önbelleği ile)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılık kurulumu (lockfile zorunlu, §29)
+        run: npm ci
+
+      - name: Prisma istemci üretimi
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test veritabanı kurulumu
+        run: npm run test:setup
+
+      - name: Testler
+        run: npm test
+
+      - name: Üretim build'i
+        run: npm run build
+
+      # Bilgilendirici güvenlik denetimi: yüksek düzey üretim bağımlılığı
+      # açıkları raporlanır. Yeni kilitlenen gerçek kırılmalara karşı işi
+      # kırmaz, ancak çıktı her koşuda görünürdür (§26/§29).
+      - name: Bağımlılık güvenlik denetimi (bilgilendirici)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true

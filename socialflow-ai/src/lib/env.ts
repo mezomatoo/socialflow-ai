@@ -19,6 +19,16 @@ function int(key: string, fallback: number): number {
   return Number.isFinite(v) ? v : fallback;
 }
 
+/**
+ * Simülasyon (demo) modu kapısı — canlıya hazır varsayılan (Faz 7 §13/§21).
+ * Geliştirme/önizlemede DEMO_MODE ile açılabilir; ÜRETİMDE HİÇBİR KOŞULDA
+ * zorlanamaz (yanlışlıkla DEMO_MODE=true kalsa bile kapatılır).
+ */
+export function resolveDemoMode(rawEnabled: string | undefined, isProduction: boolean): boolean {
+  const requested = rawEnabled === undefined ? false : ['1', 'true', 'yes', 'on'].includes(rawEnabled.toLowerCase());
+  return requested && !isProduction;
+}
+
 export const env = {
   appUrl: str('APP_URL', 'http://localhost:3000'),
   appEnv: str('APP_ENV', 'development'),
@@ -49,8 +59,8 @@ export const env = {
     /** Yapay zekâ çağrısı zaman aşımı (ms). Dolduğunda yerel motora düşülür. */
     timeoutMs: int('AI_TIMEOUT_MS', 20_000)
   },
-  /** Gerçek sosyal medya paylaşımı kapalıysa true. */
-  demoMode: bool('DEMO_MODE', true),
+  /** Gerçek sosyal medya paylaşımı kapalıysa true (üretimde asla zorlanamaz). */
+  demoMode: resolveDemoMode(process.env.DEMO_MODE, str('APP_ENV', 'development') === 'production'),
   rateLimit: {
     windowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     max: int('RATE_LIMIT_MAX', 120)
