@@ -130,6 +130,7 @@ docs/                 # Mimari, veritabanı, sağlayıcılar, dağıtım, güven
 - [AI_SERVICES.md](docs/AI_SERVICES.md) — Deterministik/LLM motorları, anlamsal yeniden yazım, güvenlik kuralları
 - [DEPLOYMENT.md](docs/DEPLOYMENT.md) — Üretim dağıtımı, ortam değişkenleri, kontrol listesi
 - [SECURITY.md](docs/SECURITY.md) — Oturum, CSRF, RBAC, token şifreleme, denetim
+- [GOOGLE_ADS.md](docs/GOOGLE_ADS.md) — Google Ads salt-okuma OAuth bağlantısı ve sunucu ayarları
 
 ---
 
@@ -216,6 +217,22 @@ Ek testler: `npm run test:oauth`, `npm run test:instagram`, `npm run test:accoun
 Instagram testleri resmî API'ye bağlanmayan test adaptörleri kullanır.
 
 [Aşama 2 raporu ve GitHub kontrol noktaları](docs/PHASE5_STAGE2_REPORT.md)
+
+---
+
+## Google Ads bağlantısı (salt okuma)
+
+Reklamlar ekranından (`/app/reklamlar`) Google Ads hesabı, Google'ın resmi OAuth akışıyla bağlanabilir.
+Erişilebilir müşteri hesapları Google Ads API üzerinden doğrulanır; token'lar `AdAccountCredential`
+alanında şifreli saklanır ve organik Google/YouTube hesabı token'larıyla karıştırılmaz.
+
+Bağlantıyı etkinleştirmek için `.env` içinde `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`,
+`GOOGLE_ADS_DEVELOPER_TOKEN` ve gerekirse `GOOGLE_ADS_LOGIN_CUSTOMER_ID` tanımlayın. Google OAuth
+uygulamasına `${APP_URL}/api/auth/google-ads/callback` dönüş adresini birebir ekleyin ve gerçek
+bağlantı için demo modunu kapatın. Bu dikey yalnızca hesap/kampanya okur; kampanya oluşturma,
+bütçe/teklif değişikliği, reklam yayınlama ve ROAS/finansal metrikler kapalıdır.
+
+Ayrıntılı kurulum: [docs/GOOGLE_ADS.md](docs/GOOGLE_ADS.md).
 
 ---
 

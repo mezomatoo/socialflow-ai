@@ -1,5 +1,6 @@
 import { AdvertisingError, noAdCapabilities, type AdvertisingProviderAdapter, type AdProviderInfo, type AdvertisingAccessContext } from './contracts';
-/** Provider directory only, NOT seven live integrations. Implement Meta vertically first. */
+import { GoogleAdsProvider } from './GoogleAdsProvider';
+/** Provider directory. Google Ads is the first live, read-only vertical. */
 const DIRECTORY = [
   { code: 'META', name: 'Meta Ads', placementsLabel: 'Facebook · Instagram · Meta yerleşimleri', color: '#2563eb' },
   { code: 'GOOGLE', name: 'Google Ads', placementsLabel: 'Google · YouTube', color: '#4285f4' },
@@ -36,4 +37,6 @@ export function createAdvertisingRegistry(adapters: AdvertisingProviderAdapter[]
     }
   };
 }
-export const advertisingRegistry = createAdvertisingRegistry(DIRECTORY.map(info => new UnavailableAdvertisingProvider(info)));
+export const advertisingRegistry = createAdvertisingRegistry(DIRECTORY.map(info =>
+  info.code === 'GOOGLE' ? new GoogleAdsProvider() : new UnavailableAdvertisingProvider(info)
+));

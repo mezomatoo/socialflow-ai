@@ -93,7 +93,7 @@ export const FEATURE_FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   paidMedia: true,
   paidMediaWrite: false,
   metaAds: false,
-  googleAds: false,
+  googleAds: true,
   youtubeAds: false,
   linkedinAds: false,
   tiktokAds: false,

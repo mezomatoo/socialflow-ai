@@ -65,8 +65,22 @@ export const env = {
     YOUTUBE: { id: str('YOUTUBE_CLIENT_ID'), secret: str('YOUTUBE_CLIENT_SECRET') },
     THREADS: { id: str('THREADS_APP_ID'), secret: str('THREADS_APP_SECRET') },
     PINTEREST: { id: str('PINTEREST_APP_ID'), secret: str('PINTEREST_APP_SECRET') },
-    GOOGLE_BUSINESS: { id: str('GOOGLE_CLIENT_ID'), secret: str('GOOGLE_CLIENT_SECRET') }
+    GOOGLE_BUSINESS: { id: str('GOOGLE_CLIENT_ID'), secret: str('GOOGLE_CLIENT_SECRET') },
+    // Google Ads may use a separate OAuth client. Falling back to the existing
+    // Google client keeps local setups simple while allowing production to use
+    // an Ads-specific consent screen when the providers are separated.
+    GOOGLE_ADS: {
+      id: str('GOOGLE_ADS_CLIENT_ID', str('GOOGLE_CLIENT_ID')),
+      secret: str('GOOGLE_ADS_CLIENT_SECRET', str('GOOGLE_CLIENT_SECRET'))
+    }
   } as Record<string, { id: string; secret: string }>,
+  advertising: {
+    googleAds: {
+      developerToken: str('GOOGLE_ADS_DEVELOPER_TOKEN'),
+      loginCustomerId: str('GOOGLE_ADS_LOGIN_CUSTOMER_ID').replace(/-/g, ''),
+      apiVersion: str('GOOGLE_ADS_API_VERSION', 'v22')
+    }
+  },
   queue: {
     pollIntervalMs: int('QUEUE_POLL_INTERVAL_MS', 5000),
     concurrency: int('QUEUE_CONCURRENCY', 2)

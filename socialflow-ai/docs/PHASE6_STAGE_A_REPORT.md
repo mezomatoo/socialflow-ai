@@ -23,8 +23,8 @@
 - Dev/test DB'ye uygulandı; migration sırasında mevcut 49 tablonun kayıt sayıları korundu. Son kontrolde ikisinde de dört migration, FK ihlali yok.
 - Reset/reseed yok; eski migration dosyaları değişmedi. DB/token/yedek Git'e eklenmedi. Yerel yedek harici felaket kurtarma yedeği değildir.
 
-## AD PROVIDERS
-Meta, Google, LinkedIn, TikTok, X, Pinterest, Snapchat yalnız dizin yer tutucularıdır. **Canlı reklam entegrasyonu: 0.** YouTube Google Ads altında; ikinci kampanya/organik yayın sistemi yok.
+## AD PROVIDERS (Stage A snapshot)
+Stage A tesliminde Meta, Google, LinkedIn, TikTok, X, Pinterest, Snapchat yalnız dizin yer tutucularıydı ve canlı reklam entegrasyonu 0'dı. YouTube Google Ads altında; ikinci kampanya/organik yayın sistemi yok. Google Ads follow-up dikeyi aşağıdaki bölümde açıklanır.
 
 ## PROVIDER CAPABILITIES
 27 yetenek mevcut adaptörlerde false. Hesap kanıtı, doğrulanmış bağlantı ve adaptör desteğiyle kesiştirilir; DB'deki true uygulanmamış işlemi açamaz. Bozuk kanıt kapalı sonuç verir. Sağlayıcı READ metotları açık API_LIMITATION döndürür, sahte veri üretmez.
@@ -58,6 +58,17 @@ OAuth, campaigns/ads/metrics READ, WRITE, webhook ve conversion API'leri uygulan
 
 ## REGRESSION CHECKS
 Önceki 53 test tekrar geçti; organik hesaplar/Gelen Kutusu tarayıcıda açıldı. Yayınlama, auth, Brand Kit, Analytics, approvals ve kuyruk yeniden yazılmadı. Uygulama ve mevcut worker yeniden başlatıldı.
+
+## FOLLOW-UP — Google Ads READ bağlantısı (29 Eylül 2026)
+
+Stage A'nın sağlayıcı yer tutucularından Google Ads için ilk canlı, salt-okuma dikeyi eklendi.
+`/api/auth/google-ads/callback` resmi OAuth + state/PKCE akışını tamamlar; `customers:listAccessibleCustomers`
+ve müşteri sorgusu ile erişilebilir hesaplar doğrulanmadan `AdAccount` yazılmaz. Reklam credential'ları
+organik `SocialProviderToken`'dan ayrı ve AES-GCM şifreli tutulur. Kampanya sorgusu adaptörde mevcut olsa
+da finansal yazma, reklam gönderme, bütçe, dönüşüm ve metrik/ROAS senkronizasyonu hâlâ kapalıdır.
+
+Kurulum ve redirect URI: [GOOGLE_ADS.md](GOOGLE_ADS.md). Gerçek sağlayıcı hesabı uçtan uca testi
+credential/developer token gerektirdiğinden bu checkout'ta çalıştırılmadı.
 
 ## CURRENT ISSUES
 - npm audit borcu: 7 bulgu (2 moderate, 4 high, 1 critical); bağımlılık yükseltmesi yapılmadı.

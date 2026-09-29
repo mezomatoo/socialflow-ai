@@ -1,9 +1,11 @@
 import prisma from '../prisma';
+import { env } from '../env';
 import type { SessionContext } from '../auth/session';
 import { isFeatureEnabled } from '../brandkit/featureFlags';
 import { AdvertisingError, AD_CAPABILITIES, unavailableMetric } from './contracts';
 import { advertisingRegistry } from './registry';
 import { canAdvertising, rejectFinancialWrite, type AdPermission } from './permissions';
+import { beginGoogleAdsConnection } from './googleAdsConnection';
 
 export async function authorizeAdvertising(session: SessionContext, permission: AdPermission = 'ads:view') {
   if (!isFeatureEnabled('paidMedia')) throw new AdvertisingError('FEATURE_DISABLED', 'Reklam modülü bu kurulumda kapalı.', 404);
@@ -80,10 +82,12 @@ export async function advertisingOverview(session: SessionContext) {
   const [totalAccounts, brands, workspace] = await Promise.all([
     prisma.adAccount.count({ where: { workspaceId: user.workspaceId } }),
     prisma.brand.findMany({ where: { workspaceId: user.workspaceId }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    prisma.workspace.findUniqueOrThrow({ where: { id: user.workspaceId }, select: { timezone: true } })
+    prisma.workspace.findUniqueOrThrow({ where: { id: user.workspaceId }, select: { timezone: true, demoMode: true } })
   ]);
+  const canManageAccounts = canAdvertising(user.role, 'ads:accounts_manage');
+  const canConnectGoogleAds = canManageAccounts && session.sessionId !== 'preview-demo' && !env.demoMode && !workspace.demoMode && isFeatureEnabled('googleAds');
   return {
-    totalAccounts, brands, workspaceTimezone: workspace.timezone, canManageAccounts: canAdvertising(user.role, 'ads:accounts_manage'),
+    totalAccounts, brands, workspaceTimezone: workspace.timezone, canManageAccounts, canConnectGoogleAds,
     providers: advertisingRegistry.list().map(adapter => ({ ...adapter.info, capabilities: adapter.getCapabilities() })),
     // No ad metrics store/ingestion in Stage A foundation. Never use account counts as spend or ROAS.
     metrics: { spend: unavailableMetric(), activeCampaigns: unavailableMetric(), impressions: unavailableMetric(), clicks: unavailableMetric(), conversions: unavailableMetric(), revenue: unavailableMetric(), roas: unavailableMetric(), cpa: unavailableMetric() },
@@ -108,11 +112,14 @@ export async function mapAdAccountBrand(session: SessionContext, id: string, inp
     return { id, version: record.version + 1 };
   });
 }
-export async function requestAdvertisingConnection(session: SessionContext, provider: string): Promise<never> {
+export async function requestAdvertisingConnection(session: SessionContext, provider: string) {
   await authorizeAdvertising(session, 'ads:accounts_manage');
-  advertisingRegistry.get(provider);
+  const adapter = advertisingRegistry.get(provider);
+  if (provider === 'GOOGLE' && adapter.info.implementation === 'READ_ONLY') {
+    return beginGoogleAdsConnection(session);
+  }
   if (session.sessionId === 'preview-demo') throw new AdvertisingError('PREVIEW_ONLY', 'Demo önizleme oturumu gerçek reklam hesabına bağlanamaz.', 403);
-  throw new AdvertisingError('API_LIMITATION', 'API KISITLAMASI — Resmî reklam OAuth bağlantısı bu aşamada henüz etkin değil. Organik hesap bağlantısı reklam izni sayılmaz.', 422);
+  throw new AdvertisingError('API_LIMITATION', 'API KISITLAMASI — Bu reklam sağlayıcısının OAuth bağlantısı henüz etkin değil. Organik hesap bağlantısı reklam izni sayılmaz.', 422);
 }
 export async function requestFinancialOperation(session: SessionContext): Promise<never> {
   await authorizeAdvertising(session, 'ads:view');
